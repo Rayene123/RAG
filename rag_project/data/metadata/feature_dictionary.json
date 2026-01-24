@@ -1,0 +1,183 @@
+{
+  "numeric_features": {
+    "AMT_INCOME_TOTAL": {
+      "description": "Amt Income Total",
+      "type": "numeric",
+      "normalized": true
+    },
+    "AMT_CREDIT": {
+      "description": "Amt Credit",
+      "type": "numeric",
+      "normalized": true
+    },
+    "AMT_ANNUITY": {
+      "description": "Amt Annuity",
+      "type": "numeric",
+      "normalized": true
+    },
+    "AMT_GOODS_PRICE": {
+      "description": "Amt Goods Price",
+      "type": "numeric",
+      "normalized": true
+    },
+    "AMT_CREDIT_prev": {
+      "description": "Amt Credit Prev",
+      "type": "numeric",
+      "normalized": true
+    },
+    "AMT_ANNUITY_prev": {
+      "description": "Amt Annuity Prev",
+      "type": "numeric",
+      "normalized": true
+    },
+    "AMT_APPLICATION": {
+      "description": "Amt Application",
+      "type": "numeric",
+      "normalized": true
+    },
+    "DAYS_BIRTH": {
+      "description": "Days Birth",
+      "type": "numeric",
+      "normalized": true
+    },
+    "DAYS_EMPLOYED": {
+      "description": "Days Employed",
+      "type": "numeric",
+      "normalized": true
+    },
+    "CNT_CHILDREN": {
+      "description": "Cnt Children",
+      "type": "numeric",
+      "normalized": true
+    },
+    "CNT_FAM_MEMBERS": {
+      "description": "Cnt Fam Members",
+      "type": "numeric",
+      "normalized": true
+    },
+    "OWN_CAR_AGE": {
+      "description": "Own Car Age",
+      "type": "numeric",
+      "normalized": true
+    },
+    "REGION_RATING_CLIENT": {
+      "description": "Region Rating Client",
+      "type": "numeric",
+      "normalized": true
+    },
+    "avg_payment_delay": {
+      "description": "Avg Payment Delay",
+      "type": "numeric",
+      "normalized": true
+    },
+    "payment_ratio": {
+      "description": "Payment Ratio",
+      "type": "numeric",
+      "normalized": true
+    },
+    "total_paid": {
+      "description": "Total Paid",
+      "type": "numeric",
+      "normalized": true
+    },
+    "total_due": {
+      "description": "Total Due",
+      "type": "numeric",
+      "normalized": true
+    },
+    "nb_active_credits": {
+      "description": "Nb Active Credits",
+      "type": "numeric",
+      "normalized": true
+    },
+    "total_external_credit": {
+      "description": "Total External Credit",
+      "type": "numeric",
+      "normalized": true
+    },
+    "total_external_debt": {
+      "description": "Total External Debt",
+      "type": "numeric",
+      "normalized": true
+    },
+    "sum_overdue_amount": {
+      "description": "Sum Overdue Amount",
+      "type": "numeric",
+      "normalized": true
+    },
+    "current_overdue_days": {
+      "description": "Current Overdue Days",
+      "type": "numeric",
+      "normalized": true
+    },
+    "max_overdue_days": {
+      "description": "Max Overdue Days",
+      "type": "numeric",
+      "normalized": true
+    },
+    "total_prolongations": {
+      "description": "Total Prolongations",
+      "type": "numeric",
+      "normalized": true
+    },
+    "STATUS_ACCEPTED": {
+      "description": "Status Accepted",
+      "type": "numeric",
+      "normalized": true
+    },
+    "STATUS_REFUSED": {
+      "description": "Status Refused",
+      "type": "numeric",
+      "normalized": true
+    }
+  },
+  "categorical_features": {
+    "NAME_CONTRACT_TYPE": {
+      "description": "Name Contract Type",
+      "type": "categorical",
+      "unique_values": 2
+    },
+    "CODE_GENDER": {
+      "description": "Code Gender",
+      "type": "categorical",
+      "unique_values": 3
+    },
+    "FLAG_OWN_CAR": {
+      "description": "Flag Own Car",
+      "type": "categorical",
+      "unique_values": 2
+    },
+    "FLAG_OWN_REALTY": {
+      "description": "Flag Own Realty",
+      "type": "categorical",
+      "unique_values": 2
+    },
+    "NAME_INCOME_TYPE": {
+      "description": "Name Income Type",
+      "type": "categorical",
+      "unique_values": 8
+    },
+    "NAME_EDUCATION_TYPE": {
+      "description": "Name Education Type",
+      "type": "categorical",
+      "unique_values": 5
+    },
+    "NAME_FAMILY_STATUS": {
+      "description": "Name Family Status",
+      "type": "categorical",
+      "unique_values": 6
+    },
+    "NAME_HOUSING_TYPE": {
+      "description": "Name Housing Type",
+      "type": "categorical",
+      "unique_values": 6
+    },
+    "OCCUPATION_TYPE": {
+      "description": "Occupation Type",
+      "type": "categorical",
+      "unique_values": 19
+    }
+  },
+  "total_records": 307511,
+  "total_features": 35
+}

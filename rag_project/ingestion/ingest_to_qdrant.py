@@ -5,7 +5,12 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 from tqdm import tqdm
 import sys
-sys.path.append('..')
+import os
+
+# Add project root to path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
+
 from config.qdrant_config import *
 
 # ---------------------------

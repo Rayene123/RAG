@@ -2,6 +2,8 @@
 /data/processed/features_for_rag_sampled.csv
 /data/processed/features_for_rag.csv
 /data/processed/metadata_for_rag.csv
-
+/data/processed/metadata_for_rag_sampled.csv
 /data/processed/merged_data.csv
+/data/processed/metadata_for_rag_sampled.csv
 /embeddings
+/config/__pycache__
