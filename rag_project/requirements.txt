@@ -1,0 +1,16 @@
+# Requirements for Qdrant RAG System
+
+# Core dependencies
+pandas>=2.0.0
+numpy>=1.24.0
+scikit-learn>=1.3.0
+
+# Qdrant and embeddings
+qdrant-client>=1.7.0
+sentence-transformers>=2.2.0
+
+# Progress bars
+tqdm>=4.65.0
+
+# Optional: For production
+python-dotenv>=1.0.0
