@@ -91,7 +91,10 @@ installments_agg = installments.groupby('SK_ID_CURR').agg({
     'AMT_PAYMENT':'total_paid',
     'AMT_INSTALMENT':'total_due'
 })
-installments_agg['payment_ratio'] = installments_agg['total_paid'] / installments_agg['total_due']
+# Avoid division by zero
+installments_agg['payment_ratio'] = installments_agg.apply(
+    lambda x: x['total_paid'] / x['total_due'] if x['total_due'] > 0 else 0, axis=1
+)
 
 # ---------------------------
 # 5️⃣ Merge all with application_train
@@ -104,18 +107,76 @@ df = df.merge(bureau_agg, on='SK_ID_CURR', how='left')
 df = df.merge(installments_agg, on='SK_ID_CURR', how='left')
 
 # ---------------------------
-# 6️⃣ Fill missing values
+# 6️⃣ Add temporal metadata from data
 # ---------------------------
-df.fillna(0, inplace=True)
+from datetime import datetime, timedelta
+
+# Calculate profile generation date (assuming data is current)
+df['profile_date'] = datetime.now().strftime('%Y-%m-%d')
+
+# Calculate data coverage period from financial history (not birth dates)
+# Use credit history and employment start dates to determine data range
+if 'first_credit_days' in df.columns and 'DAYS_EMPLOYED' in df.columns:
+    # Get the oldest financial data point (excluding birth which goes too far back)
+    # Focus on actual financial records: credit history and employment
+    financial_history_cols = ['first_credit_days', 'DAYS_EMPLOYED']
+    
+    # Filter out unrealistic values (0 or very extreme values)
+    oldest_financial_days = df[financial_history_cols].replace(0, np.nan).min().min()
+    
+    # Convert to years - but cap at reasonable range (e.g., max 10 years of history)
+    if pd.notna(oldest_financial_days) and oldest_financial_days < 0:
+        history_years = min(int(abs(oldest_financial_days) / 365), 10)  # Cap at 10 years
+        end_year = 2018  # Typical application year for this dataset
+        start_year = end_year - history_years
+    else:
+        start_year = 2015
+        end_year = 2018
+    
+    df['data_period'] = f"{start_year}-{end_year}"
+else:
+    df['data_period'] = '2015-2018'  # Default reasonable range
+
+print(f"\nTemporal metadata added:")
+print(f"  Profile date: {df['profile_date'].iloc[0]}")
+print(f"  Data period: {df['data_period'].iloc[0]}")
+
+# ---------------------------
+# 7️⃣ Fill missing values intelligently
+# ---------------------------
+# Fill numeric columns with 0
+numeric_cols = df.select_dtypes(include=[np.number]).columns
+df[numeric_cols] = df[numeric_cols].fillna(0)
+
+# Fill categorical columns with 'Unknown'
+categorical_cols = df.select_dtypes(include=['object']).columns
+df[categorical_cols] = df[categorical_cols].fillna('Unknown')
+
+# ---------------------------
+# 8️⃣ Validate critical columns
+# ---------------------------
+critical_cols = ['AMT_CREDIT', 'AMT_ANNUITY', 'AMT_INCOME_TOTAL', 'AMT_GOODS_PRICE']
+print(f"\nValidating critical columns...")
+for col in critical_cols:
+    if col in df.columns:
+        print(f"  ✓ {col}: {df[col].notna().sum():,} non-null values")
+    else:
+        print(f"  ✗ {col}: MISSING!")
+
+print(f"\nColumn name check:")
+credit_cols = [c for c in df.columns if 'AMT_CREDIT' in c or 'AMT_ANNUITY' in c]
+print(f"  Credit/Annuity columns: {credit_cols}")
 
 # ---------------------------
 # ✅ df is ready
 # ---------------------------
-print(df.shape)
+print(f"\n{'='*80}")
+print(f"Final dataset shape: {df.shape}")
+print(f"{'='*80}")
 print(df.head())
 
 # ---------------------------
-# 7️⃣ Save merged dataset
+# 9️⃣ Save merged dataset
 # ---------------------------
 output_path = "data/processed/merged_data.csv"
 df.to_csv(output_path, index=False)

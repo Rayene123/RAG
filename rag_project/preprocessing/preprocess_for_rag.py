@@ -15,11 +15,14 @@ print("Selecting features for text-based RAG...")
 
 # Key numeric features (most informative for credit risk)
 numeric_cols = [
-    'AMT_INCOME_TOTAL', 'AMT_CREDIT_x', 'AMT_ANNUITY_x', 'AMT_GOODS_PRICE',
+    'AMT_INCOME_TOTAL', 'AMT_CREDIT', 'AMT_ANNUITY', 'AMT_GOODS_PRICE',
+    'AMT_CREDIT_prev', 'AMT_ANNUITY_prev', 'AMT_APPLICATION',
     'DAYS_BIRTH', 'DAYS_EMPLOYED', 'CNT_CHILDREN', 'CNT_FAM_MEMBERS',
-    'avg_payment_delay', 'payment_ratio',
+    'OWN_CAR_AGE', 'REGION_RATING_CLIENT',
+    'avg_payment_delay', 'payment_ratio', 'total_paid', 'total_due',
     'nb_active_credits', 'total_external_credit', 'total_external_debt',
-    'sum_overdue_amount', 'current_overdue_days'
+    'sum_overdue_amount', 'current_overdue_days', 'max_overdue_days',
+    'total_prolongations', 'STATUS_ACCEPTED', 'STATUS_REFUSED'
 ]
 
 # Key categorical features (will be converted to text later)
@@ -37,6 +40,7 @@ print(f"Selected {len(numeric_cols)} numeric and {len(categorical_cols)} categor
 print(f"Total features: {len(numeric_cols) + len(categorical_cols)}")
 
 id_cols = ['SK_ID_CURR']
+date_cols = ['profile_date', 'data_period']
 
 # ---------------------------
 # 3️⃣ Add placeholders for documents (text/pdf/images)
@@ -49,8 +53,8 @@ for col in doc_cols:
 # ---------------------------
 # 4️⃣ Create features dataframe (keep categoricals as text)
 # ---------------------------
-# Combine ID, numeric, and categorical features (NO one-hot encoding)
-features_df = df[id_cols + numeric_cols + categorical_cols].copy()
+# Combine ID, dates, numeric, and categorical features (NO one-hot encoding)
+features_df = df[id_cols + date_cols + numeric_cols + categorical_cols].copy()
 
 # Fill missing categorical values
 for col in categorical_cols:
