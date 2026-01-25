@@ -1,7 +1,12 @@
 from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
 import sys
-sys.path.append('..')
+import os
+
+# Add project root to path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, project_root)
+
 from config.qdrant_config import *
 
 class QdrantRetriever:
@@ -33,12 +38,13 @@ class QdrantRetriever:
         query_vector = self.model.encode(query).tolist()
         
         # Search in Qdrant
-        search_result = self.client.search(
+        from qdrant_client.models import Filter
+        search_result = self.client.query_points(
             collection_name=self.collection_name,
-            query_vector=query_vector,
+            query=query_vector,
             limit=top_k,
-            query_filter=filter_conditions
-        )
+            query_filter=Filter(**filter_conditions) if filter_conditions else None
+        ).points
         
         # Format results
         results = []
@@ -115,7 +121,7 @@ if __name__ == "__main__":
         print(f"\n--- Result {i} (Score: {result['score']:.4f}) ---")
         print(f"Client ID: {result['client_id']}")
         print(f"Target: {'Default Risk' if result['target'] == 1 else 'Good Standing'}")
-        print(f"\n{result['text'][:400]}...")
+        print(f"\n{result['text']}...")
     
     # Example search 2: Profile-based search
     print("\n" + "="*80)
