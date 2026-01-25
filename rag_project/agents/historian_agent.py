@@ -11,7 +11,7 @@ class HistorianAgent(BaseAgent):
     to identify trends, precedents, and similar cases
     """
     
-    def __init__(self, model_name: str = "gpt-3.5-turbo", temperature: float = 0.3):
+    def __init__(self, model_name: str = "mistral-small-latest", temperature: float = 0.3):
         """Initialize Historian Agent with lower temperature for factual analysis"""
         super().__init__(model_name, temperature)
         
@@ -64,7 +64,7 @@ Analysis:"""
         # Format similar cases
         formatted_cases = self._format_similar_cases(similar_cases)
         
-        # Run chain
+        # Run chain (LCEL returns AIMessage, extract content)
         result = self.chain.invoke({
             'decision_context': decision_context,
             'similar_cases': formatted_cases
@@ -73,7 +73,7 @@ Analysis:"""
         # Parse and structure results
         analysis = {
             'agent': 'Historian',
-            'raw_output': result.get('text', ''),
+            'raw_output': result.content if hasattr(result, 'content') else str(result),
             'similar_cases_count': len(similar_cases),
             'avg_similarity_score': self._calculate_avg_score(similar_cases)
         }
@@ -164,7 +164,29 @@ if __name__ == "__main__":
     }
     
     result = historian.analyze(context)
-    print("\n=== Historian Analysis ===")
-    print(f"Similar cases found: {result['similar_cases_count']}")
-    print(f"Average similarity: {result['avg_similarity_score']:.3f}")
-    print(f"\nAnalysis:\n{result['raw_output']}")
+    print("\n" + "="*60)
+    print("HISTORIAN ANALYSIS - REAL DATA FROM QDRANT")
+    print("="*60)
+    print(f"\n📊 Retrieved Cases: {result['similar_cases_count']}")
+    print(f"📈 Average Similarity Score: {result['avg_similarity_score']:.4f}")
+    
+    # Show detailed info about retrieved cases
+    print("\n" + "-"*60)
+    print("RETRIEVED CASES DETAILS:")
+    print("-"*60)
+    for i, case in enumerate(similar_cases, 1):
+        print(f"\n[Case {i}]")
+        print(f"  Client ID: {case.get('client_id', 'N/A')}")
+        print(f"  Similarity: {case.get('score', 0):.4f}")
+        print(f"  Target: {case.get('target', 'N/A')}")
+        metadata = case.get('metadata', {}) or case.get('payload', {})
+        if metadata:
+            print(f"  Key Features:")
+            for key, val in list(metadata.items())[:5]:  # Show first 5 features
+                if key not in ['client_id', 'target', 'text']:
+                    print(f"    • {key}: {val}")
+    
+    print("\n" + "-"*60)
+    print("AI ANALYSIS:")
+    print("-"*60)
+    print(result['raw_output'])

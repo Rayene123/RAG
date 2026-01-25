@@ -11,8 +11,9 @@ sentence-transformers>=2.2.0
 
 # LangChain for agents
 langchain>=0.1.0
-langchain-openai>=0.0.5
+langchain-mistralai>=0.1.0
 langchain-community>=0.0.20
+python-dotenv>=1.0.0
 
 # Progress bars
 tqdm>=4.65.0

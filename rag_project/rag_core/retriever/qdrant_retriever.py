@@ -46,15 +46,18 @@ class QdrantRetriever:
             query_filter=Filter(**filter_conditions) if filter_conditions else None
         ).points
         
-        # Format results
+        # Format results - include ALL payload data
         results = []
         for hit in search_result:
-            results.append({
-                'client_id': hit.payload['client_id'],
+            result = {
+                'client_id': hit.payload.get('client_id'),
                 'score': hit.score,
-                'target': hit.payload['target'],
-                'text': hit.payload['text']
-            })
+                'target': hit.payload.get('target'),
+                'text': hit.payload.get('text'),
+                'payload': hit.payload,  # Include full payload
+                'metadata': hit.payload  # Also as 'metadata' for compatibility
+            }
+            results.append(result)
         
         return results
     
@@ -114,7 +117,7 @@ if __name__ == "__main__":
     print("\n" + "="*80)
     print("Example 1: Natural language search")
     print("="*80)
-    query = "Find clients with high income who own property and have good payment history"
+    query = "Find clients with high income who own property and have good payment history and their loan requests were approved"
     results = retriever.search(query, top_k=3)
     
     for i, result in enumerate(results, 1):
@@ -137,3 +140,5 @@ if __name__ == "__main__":
     for i, result in enumerate(results, 1):
         print(f"\n--- Result {i} (Score: {result['score']:.4f}) ---")
         print(f"Client ID: {result['client_id']}")
+        print(f"Target: {'Loan REJECTED (Default Risk)' if result['target'] == 1 else 'Loan APPROVED (Good Standing)'}")
+        print(f"\n{result['text'][:500]}...")  # Show first 500 chars

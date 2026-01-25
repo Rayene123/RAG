@@ -10,12 +10,12 @@ class AgentOrchestrator:
     Orchestrates the Historian agent for decision analysis
     """
     
-    def __init__(self, model_name: str = "gpt-3.5-turbo"):
+    def __init__(self, model_name: str = "mistral-small-latest"):
         """
         Initialize historian agent
         
         Args:
-            model_name: LLM model to use
+            model_name: Mistral model to use
         """
         self.historian = HistorianAgent(model_name=model_name)
     

@@ -7,3 +7,7 @@
 /data/processed/metadata_for_rag_sampled.csv
 /embeddings
 /config/__pycache__
+/agents/__pycache__
+/rag_core/__pycache__
+/tests/__pycache__  
+/rag_core/retriever/__pycache__
