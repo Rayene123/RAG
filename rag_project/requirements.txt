@@ -20,3 +20,11 @@ tqdm>=4.65.0
 
 # Optional: For production
 python-dotenv>=1.0.0
+
+# Document processing and OCR
+opencv-python>=4.8.0
+pillow>=10.0.0
+pytesseract>=0.3.10
+pdfplumber>=0.10.0
+PyMuPDF>=1.23.0
+easyocr>=1.7.0  # Optional but recommended for fallback OCR
