@@ -55,8 +55,9 @@ def create_client_description(row):
     external_credit = f"${row.get('total_external_credit', 0):,.0f}" if pd.notna(row.get('total_external_credit')) else '$0'
     external_debt = f"${row.get('total_external_debt', 0):,.0f}" if pd.notna(row.get('total_external_debt')) else '$0'
     overdue_amount = row.get('sum_overdue_amount', 0)
-    overdue_days = int(row.get('current_overdue_days', 0)) if pd.notna(row.get('current_overdue_days')) else 0
+    max_overdue_amount = row.get('max_overdue_amount', 0)
     max_overdue_days = int(row.get('max_overdue_days', 0)) if pd.notna(row.get('max_overdue_days')) else 0
+    # Note: max_overdue_days is the max of CREDIT_DAY_OVERDUE (current overdue) across all bureau records
     prolongations = int(row.get('total_prolongations', 0)) if pd.notna(row.get('total_prolongations')) else 0
     
     # Previous application history
@@ -86,7 +87,7 @@ def create_client_description(row):
     
     # Build risk reasoning
     risk_reasons = []
-    if overdue_days == 0:
+    if max_overdue_days == 0:
         risk_reasons.append("No current overdue payments")
     if payment_ratio >= 0.95:
         risk_reasons.append("Excellent payment completion ratio")
@@ -110,6 +111,13 @@ def create_client_description(row):
             pass
     if max_overdue_days > 30:
         risk_reasons.append("Historical overdue payment issues")
+    if max_overdue_amount > 0:
+        try:
+            income_val = float(income.replace('$', '').replace(',', ''))
+            if income_val > 0 and max_overdue_amount / income_val > 0.5:
+                risk_reasons.append("Large historical overdue amounts relative to income")
+        except:
+            pass
     if prolongations > 0:
         risk_reasons.append(f"Has {prolongations} credit prolongation(s)")
     
@@ -155,10 +163,11 @@ Current Loan Application:
 - Total Outstanding Debt: {external_debt}
 - Average Payment Delay: {payment_delay:.1f} days{' (early payments)' if payment_delay < 0 else ''}
 - Payment Completion Ratio: {payment_ratio:.1%}
-- Current Overdue Days: {overdue_days}
+- Current Overdue Days: {max_overdue_days}
 - Historical Maximum Overdue Days: {max_overdue_days}
 - Total Credit Prolongations: {prolongations}
 - Current Overdue Amount: ${overdue_amount:,.0f}
+- Historical Maximum Overdue Amount: ${max_overdue_amount:,.0f}
 
 Risk Assessment:
 Status: {'DEFAULT RISK' if row['TARGET'] == 1 else 'GOOD STANDING'}

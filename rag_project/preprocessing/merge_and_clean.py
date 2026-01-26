@@ -65,12 +65,21 @@ bureau_agg = bureau.groupby('SK_ID_CURR').agg({
     'AMT_CREDIT_SUM':'total_external_credit',
     'AMT_CREDIT_SUM_DEBT':'total_external_debt',
     'AMT_CREDIT_SUM_OVERDUE':'sum_overdue_amount',
-    'AMT_CREDIT_MAX_OVERDUE':'max_overdue_days',
+    'AMT_CREDIT_MAX_OVERDUE':'max_overdue_amount',  # This is $ amount, not days!
     'CNT_CREDIT_PROLONG':'total_prolongations',
     'DAYS_CREDIT':'first_credit_days',
     'DAYS_CREDIT_ENDDATE':'last_credit_days',
-    'CREDIT_DAY_OVERDUE':'current_overdue_days'
+    'CREDIT_DAY_OVERDUE':'max_overdue_days'  # Max current overdue days across all credits
 })
+
+# Cap max_overdue_days (data quality: realistic max is 5 years)
+print("\nCapping overdue days...")
+print(f"  Before capping - max_overdue_days max: {bureau_agg['max_overdue_days'].max():,.0f}")
+print(f"  Values > 5 years (1825 days): {(bureau_agg['max_overdue_days'] > 1825).sum()}")
+
+bureau_agg['max_overdue_days'] = bureau_agg['max_overdue_days'].clip(upper=1825)
+
+print(f"  After capping - max_overdue_days max: {bureau_agg['max_overdue_days'].max():,.0f}")
 
 # ---------------------------
 # 4️⃣ Aggregate installments_payments per SK_ID_CURR

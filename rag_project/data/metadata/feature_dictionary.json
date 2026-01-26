@@ -105,11 +105,6 @@
       "type": "numeric",
       "normalized": true
     },
-    "current_overdue_days": {
-      "description": "Current Overdue Days",
-      "type": "numeric",
-      "normalized": true
-    },
     "max_overdue_days": {
       "description": "Max Overdue Days",
       "type": "numeric",
@@ -179,5 +174,5 @@
     }
   },
   "total_records": 307511,
-  "total_features": 35
+  "total_features": 34
 }

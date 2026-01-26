@@ -37,13 +37,26 @@ class QdrantRetriever:
         # Generate query embedding
         query_vector = self.model.encode(query).tolist()
         
+        # Build Qdrant filter if conditions provided
+        query_filter = None
+        if filter_conditions:
+            from qdrant_client.models import Filter, FieldCondition, MatchValue
+            
+            # Build must conditions
+            must_conditions = []
+            for key, value in filter_conditions.items():
+                must_conditions.append(
+                    FieldCondition(key=key, match=MatchValue(value=value))
+                )
+            
+            query_filter = Filter(must=must_conditions)
+        
         # Search in Qdrant
-        from qdrant_client.models import Filter
         search_result = self.client.query_points(
             collection_name=self.collection_name,
             query=query_vector,
             limit=top_k,
-            query_filter=Filter(**filter_conditions) if filter_conditions else None
+            query_filter=query_filter
         ).points
         
         # Format results - include ALL payload data
