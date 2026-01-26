@@ -27,7 +27,7 @@ def test_query_router():
     print("TEST 1: Text Query")
     print("-"*80)
     
-    text_query = "Find clients with high income and owns real estate"
+    text_query = "Find clients with low income and didn't pay the loan"
     results = router.route(text_query, top_k=2)
     
     print(f"\nFound {len(results)} results:")

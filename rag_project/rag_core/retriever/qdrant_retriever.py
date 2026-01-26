@@ -29,7 +29,7 @@ class QdrantRetriever:
         Args:
             query (str): Natural language search query
             top_k (int): Number of results to return
-            filter_conditions (dict): Optional filters (e.g., {'target': 1})
+            filter_conditions (dict): Optional filters (e.g., {'target': 1, 'CODE_GENDER': 'F', 'DAYS_BIRTH_range': {'gte': -12000}})
         
         Returns:
             list: List of search results with scores and metadata
@@ -40,14 +40,26 @@ class QdrantRetriever:
         # Build Qdrant filter if conditions provided
         query_filter = None
         if filter_conditions:
-            from qdrant_client.models import Filter, FieldCondition, MatchValue
+            from qdrant_client.models import Filter, FieldCondition, MatchValue, Range
             
             # Build must conditions
             must_conditions = []
             for key, value in filter_conditions.items():
-                must_conditions.append(
-                    FieldCondition(key=key, match=MatchValue(value=value))
-                )
+                # Handle range filters (e.g., DAYS_BIRTH_range, AMT_INCOME_TOTAL_range)
+                if key.endswith('_range') and isinstance(value, dict):
+                    field_name = key.replace('_range', '')
+                    range_filter = Range(
+                        gte=value.get('gte'),
+                        lte=value.get('lte')
+                    )
+                    must_conditions.append(
+                        FieldCondition(key=field_name, range=range_filter)
+                    )
+                # Handle exact match filters
+                else:
+                    must_conditions.append(
+                        FieldCondition(key=key, match=MatchValue(value=value))
+                    )
             
             query_filter = Filter(must=must_conditions)
         

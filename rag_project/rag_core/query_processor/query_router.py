@@ -20,6 +20,7 @@ from rag_core.query_processor.transformers.pdf_transformer import PDFTransformer
 from rag_core.query_processor.transformers.image_transformer import ImageTransformer
 from rag_core.retriever.qdrant_retriever import QdrantRetriever
 from rag_core.utils.feature_extractor import FeatureExtractor
+from rag_core.query_processor.llm_query_understanding import LLMQueryUnderstanding
 
 
 class QueryRouter:
@@ -27,12 +28,13 @@ class QueryRouter:
     Routes queries to appropriate processing pipeline based on input type.
     """
     
-    def __init__(self, retriever: QdrantRetriever = None):
+    def __init__(self, retriever: QdrantRetriever = None, use_llm_understanding: bool = True):
         """
         Initialize Query Router.
         
         Args:
             retriever: QdrantRetriever instance. If None, creates a new one.
+            use_llm_understanding: Use LLM for query understanding (default: True)
         """
         # Initialize retriever
         self.retriever = retriever if retriever else QdrantRetriever()
@@ -44,7 +46,21 @@ class QueryRouter:
         # Initialize feature extractor
         self.feature_extractor = FeatureExtractor()
         
-        print("✅ QueryRouter initialized")
+        # Initialize query understanding (LLM-based)
+        self.use_llm_understanding = use_llm_understanding
+        if use_llm_understanding:
+            try:
+                self.query_understanding = LLMQueryUnderstanding(llm_provider="mistral")
+                print("✅ QueryRouter initialized (LLM-based understanding)")
+            except Exception as e:
+                print(f"⚠️  Failed to initialize LLM understanding: {e}")
+                print("   Query understanding disabled, will use direct search")
+                self.query_understanding = None
+                self.use_llm_understanding = False
+                print("✅ QueryRouter initialized (no query understanding)")
+        else:
+            self.query_understanding = None
+            print("✅ QueryRouter initialized (no query understanding)")
     
     @property
     def pdf_transformer(self):
@@ -94,7 +110,8 @@ class QueryRouter:
             return 'text'
     
     def process_text_query(self, query: str, top_k: int = 5, 
-                          filter_conditions: Dict = None) -> List[Dict[str, Any]]:
+                          filter_conditions: Dict = None,
+                          enable_query_understanding: bool = True) -> List[Dict[str, Any]]:
         """
         Process a text query directly.
         
@@ -102,13 +119,34 @@ class QueryRouter:
             query: Natural language query string
             top_k: Number of results to return
             filter_conditions: Optional filters for search
+            enable_query_understanding: Whether to parse query for intent (default: True)
         
         Returns:
             List of search results
         """
-        print(f"📝 Processing text query: '{query[:50]}...'")
-        results = self.retriever.search(query, top_k=top_k, 
-                                       filter_conditions=filter_conditions)
+        # Parse query for intent if enabled and available
+        if enable_query_understanding and self.query_understanding:
+            parsed = self.query_understanding.parse_query(query)
+            
+            # Show what was understood
+            if parsed['detected_filters']:
+                print(f"🧠 Query Understanding:")
+                for f in parsed['detected_filters']:
+                    print(f"   - {f}")
+            
+            # Use cleaned query for search
+            search_query = parsed['search_query'] if parsed['search_query'] else query
+            
+            # Merge parsed filters with explicit filters
+            final_filters = filter_conditions.copy() if filter_conditions else {}
+            final_filters.update(parsed['filters'])
+        else:
+            search_query = query
+            final_filters = filter_conditions
+        
+        print(f"📝 Processing text query: '{search_query[:50]}...'")
+        results = self.retriever.search(search_query, top_k=top_k, 
+                                       filter_conditions=final_filters)
         print(f"   Found {len(results)} results")
         return results
     
