@@ -33,7 +33,7 @@ if STRATIFY and 'TARGET' in metadata.columns:
     ).reset_index(drop=True)
     
     # Separate back
-    features_sampled = df_sampled.drop(columns=['TARGET'])
+    features_sampled = df_sampled
     metadata_sampled = metadata[metadata['SK_ID_CURR'].isin(df_sampled['SK_ID_CURR'])]
     
     print(f"\nSampled target distribution:")

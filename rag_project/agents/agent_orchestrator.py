@@ -1,36 +1,40 @@
 """
-Agent Orchestrator - Coordinates historian agent for decision analysis
+Agent Orchestrator - Coordinates historian and risk agents for decision analysis
 """
 from typing import Dict, List, Any
 from agents.historian_agent import HistorianAgent
+from agents.risk_agent import RiskAgent
 
 
 class AgentOrchestrator:
     """
-    Orchestrates the Historian agent for decision analysis
+    Orchestrates the Historian and Risk agents for decision analysis
     """
     
     def __init__(self, model_name: str = "mistral-small-latest"):
         """
-        Initialize historian agent
+        Initialize historian and risk agents
         
         Args:
             model_name: Mistral model to use
         """
         self.historian = HistorianAgent(model_name=model_name)
+        self.risk = RiskAgent(model_name=model_name)
     
     def analyze_decision(self,
                         decision_context: Dict[str, Any],
-                        similar_cases: List[Dict]) -> Dict[str, Any]:
+                        similar_cases: List[Dict],
+                        alternatives: List[Dict] = None) -> Dict[str, Any]:
         """
-        Complete decision analysis using historian agent
+        Complete decision analysis using historian and risk agents
         
         Args:
             decision_context: Information about the current decision
             similar_cases: Similar past cases from RAG retrieval
+            alternatives: Optional list of decision alternatives for risk analysis
         
         Returns:
-            Historical analysis results
+            Historical and risk analysis results
         """
         # Historical Analysis
         print("Running Historian Agent...")
@@ -39,10 +43,21 @@ class AgentOrchestrator:
             'similar_cases': similar_cases
         })
         
+        # Risk Analysis
+        risk_result = None
+        if alternatives:
+            print("Running Risk Agent...")
+            risk_result = self.risk.analyze({
+                'decision_context': self._format_decision_context(decision_context),
+                'alternatives': alternatives,
+                'similar_cases': similar_cases
+            })
+        
         # Compile results
         results = {
             'decision_context': decision_context,
             'historian_analysis': historian_result,
+            'risk_analysis': risk_result,
             'similar_cases_count': len(similar_cases),
             'avg_similarity': self._calculate_avg_similarity(similar_cases)
         }
