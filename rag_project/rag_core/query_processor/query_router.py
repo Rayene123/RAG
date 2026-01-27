@@ -134,6 +134,15 @@ class QueryRouter:
                 for f in parsed['detected_filters']:
                     print(f"   - {f}")
             
+            # Show filters being applied
+            if parsed.get('filters'):
+                print(f"🔍 Applying Filters:")
+                for key, value in parsed['filters'].items():
+                    if isinstance(value, dict):
+                        print(f"   - {key}: {value}")
+                    else:
+                        print(f"   - {key}: {value}")
+            
             # Use cleaned query for search
             search_query = parsed['search_query'] if parsed['search_query'] else query
             

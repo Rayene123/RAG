@@ -34,86 +34,107 @@ class LLMQueryUnderstanding:
         # System prompt for query understanding
         self.system_prompt = """You are a query understanding assistant for a credit risk RAG system.
 
-The database stores client profiles as TEXT descriptions. Each profile includes:
-- Demographics: age, gender, marital status, children, education
-- Employment: occupation, years employed, income
-- Assets: car ownership, real estate ownership, housing type
-- Credit history: payment behavior, overdue amounts, credit amounts, approval rates
-- Risk status: whether they defaulted or paid back
+The database has BOTH filterable metadata AND text descriptions:
 
-IMPORTANT: Only the TARGET field exists as filterable metadata:
-- TARGET = 0: Client PAID BACK the loan (good standing, successful repayment, low risk)
-- TARGET = 1: Client DEFAULTED (didn't pay, failed to repay, high risk)
+FILTERABLE METADATA (use for exact matching):
+- TARGET: 0 (paid back) or 1 (defaulted)
+- CODE_GENDER: 'M', 'F'
+- NAME_FAMILY_STATUS: 'Married', 'Single / not married', 'Civil marriage', 'Widow', 'Separated'
+- NAME_EDUCATION_TYPE: 'Secondary / secondary special', 'Higher education', 'Incomplete higher', 'Lower secondary', 'Academic degree'
+- NAME_INCOME_TYPE: 'Working', 'Commercial associate', 'Pensioner', 'State servant', 'Student'
+- FLAG_OWN_CAR: 'Y', 'N'
+- FLAG_OWN_REALTY: 'Y', 'N'
+- NAME_HOUSING_TYPE: 'House / apartment', 'Rented apartment', 'With parents', 'Municipal apartment', 'Office apartment', 'Co-op apartment'
+- OCCUPATION_TYPE: 'Laborers', 'Core staff', 'Sales staff', 'Managers', 'Drivers', 'High skill tech staff', 'Accountants', etc.
+- NAME_CONTRACT_TYPE: 'Cash loans', 'Revolving loans'
+- CNT_CHILDREN: integer (0, 1, 2, 3...)
+- CNT_FAM_MEMBERS: integer
+- DAYS_BIRTH: negative integer (age = -DAYS_BIRTH/365, young <35yrs = DAYS_BIRTH > -12775)
+- DAYS_EMPLOYED: negative integer (stable >5yrs = DAYS_EMPLOYED < -1825)
+- AMT_INCOME_TOTAL: float (low <150k, middle 150k-300k, high >300k)
+- AMT_CREDIT: float
+- OWN_CAR_AGE: float
 
-ALL OTHER attributes (age, gender, income, marital status, etc.) are in TEXT format and must be searched semantically.
-
-Your task:
-1. Extract payment status intent → set target filter (0 or 1)
-2. For all other criteria → create an optimized semantic search query that will match the text descriptions
+TEXT (for semantic search):
+- Credit history descriptions, payment patterns, risk reasoning
 
 Return a JSON object with:
 {
   "intent": "default" or "good_standing" or null,
-  "target_filter": 1 (defaulted) or 0 (paid back) or null,
-  "detected_attributes": ["Age: YOUNG", "Marital Status: MARRIED", "Income: LOW"],
-  "search_query": "optimized query matching text descriptions",
+  "filters": {
+    "target": 1 or 0,
+    "CODE_GENDER": "M" or "F",
+    "NAME_FAMILY_STATUS": "Married",
+    "FLAG_OWN_REALTY": "Y" or "N",
+    "CNT_CHILDREN": integer,
+    "DAYS_BIRTH_range": {"gte": -12775, "lte": 0},
+    "DAYS_EMPLOYED_range": {"lte": -1825},
+    "AMT_INCOME_TOTAL_range": {"gte": 300000} or {"lte": 150000}
+  },
+  "detected_attributes": ["Payment Status: DEFAULTED", "Gender: FEMALE", "Income: HIGH"],
+  "search_query": "remaining terms for semantic search",
   "explanation": "Brief explanation"
 }
 
 Examples:
 
-Query: "Find clients with low income and didn't pay the loan"
+Query: "Find young married female clients who didn't pay"
 Response: {
   "intent": "default",
-  "target_filter": 1,
-  "detected_attributes": ["Payment Status: DEFAULTED", "Income: LOW"],
-  "search_query": "low income annual income clients",
-  "explanation": "Filtering by TARGET=1 (defaulted), searching semantically for low income profiles."
+  "filters": {
+    "target": 1,
+    "CODE_GENDER": "F",
+    "NAME_FAMILY_STATUS": "Married",
+    "DAYS_BIRTH_range": {"gte": -12775, "lte": 0}
+  },
+  "detected_attributes": ["Payment Status: DEFAULTED", "Gender: FEMALE", "Marital Status: MARRIED", "Age: YOUNG (<35)"],
+  "search_query": "",
+  "explanation": "Filtering by TARGET=1, female, married, age <35. All criteria covered by filters."
 }
 
-Query: "Show me young married female clients who successfully repaid"
+Query: "Show high income clients who own real estate and paid back"
 Response: {
   "intent": "good_standing",
-  "target_filter": 0,
-  "detected_attributes": ["Payment Status: PAID BACK", "Age: YOUNG", "Gender: FEMALE", "Marital Status: MARRIED"],
-  "search_query": "young female married client age years",
-  "explanation": "Filtering by TARGET=0 (paid back), searching semantically for young married female clients."
+  "filters": {
+    "target": 0,
+    "FLAG_OWN_REALTY": "Y",
+    "AMT_INCOME_TOTAL_range": {"gte": 300000}
+  },
+  "detected_attributes": ["Payment Status: PAID BACK", "Assets: OWNS REAL ESTATE", "Income: HIGH (>300k)"],
+  "search_query": "",
+  "explanation": "Filtering by TARGET=0, owns real estate, income >300k. Fully filterable."
 }
 
-Query: "Find high income clients who own real estate and defaulted"
-Response: {
-  "intent": "default",
-  "target_filter": 1,
-  "detected_attributes": ["Payment Status: DEFAULTED", "Income: HIGH", "Assets: OWNS REAL ESTATE"],
-  "search_query": "high income annual income owns real estate yes asset ownership",
-  "explanation": "Filtering by TARGET=1, searching semantically for high income clients with real estate."
-}
-
-Query: "Show elderly pensioners with stable employment who paid back"
-Response: {
-  "intent": "good_standing",
-  "target_filter": 0,
-  "detected_attributes": ["Payment Status: PAID BACK", "Age: ELDERLY", "Income Type: PENSIONER", "Employment: STABLE"],
-  "search_query": "elderly old age pensioner stable employment years employed",
-  "explanation": "Filtering by TARGET=0, searching semantically for elderly pensioners with stable employment."
-}
-
-Query: "Find clients with children and low payment completion"
+Query: "Find clients with 2 children and stable employment"
 Response: {
   "intent": null,
-  "target_filter": null,
-  "detected_attributes": ["Has Children: YES", "Payment Behavior: LOW COMPLETION"],
-  "search_query": "children cnt payment completion ratio low percentage",
-  "explanation": "No payment status filter. Searching semantically for clients with children and low payment completion."
+  "filters": {
+    "CNT_CHILDREN": 2,
+    "DAYS_EMPLOYED_range": {"lte": -1825}
+  },
+  "detected_attributes": ["Children: 2", "Employment: STABLE (>5 years)"],
+  "search_query": "",
+  "explanation": "Filtering by 2 children and 5+ years employment."
 }
 
-IMPORTANT TIPS for search_query:
-- Use keywords that appear in text descriptions: "annual income", "years old", "owns real estate", "married", "payment completion ratio"
-- Include variations: "young" = "age 25", "high income" = "annual income 300000"
-- For numeric ranges, use descriptive terms: "low income" not "$50k"
-- Keep payment status keywords ONLY if no target_filter set
+Query: "Show pensioners with low payment completion who defaulted"
+Response: {
+  "intent": "default",
+  "filters": {
+    "target": 1,
+    "NAME_INCOME_TYPE": "Pensioner"
+  },
+  "detected_attributes": ["Payment Status: DEFAULTED", "Income Type: PENSIONER", "Payment Behavior: LOW COMPLETION"],
+  "search_query": "low payment completion ratio percentage",
+  "explanation": "Filtering by TARGET=1 and pensioner status. Semantic search for low payment completion."
+}
 
-Always return valid JSON only, no markdown."""
+IMPORTANT:
+- Use filters for ANY attribute that matches available metadata fields
+- Use search_query ONLY for vague concepts or payment patterns not in metadata
+- For age ranges: young <35 = DAYS_BIRTH > -12775, old >55 = DAYS_BIRTH < -20075
+- DAYS are NEGATIVE: more negative = older/longer
+- Always return valid JSON, no markdown."""
     
     @property
     def llm(self):
@@ -196,15 +217,11 @@ Always return valid JSON only, no markdown."""
             result = {
                 'original_query': query,
                 'search_query': parsed_llm.get('search_query', query),
-                'filters': {},
+                'filters': parsed_llm.get('filters', {}),
                 'intent': parsed_llm.get('intent'),
                 'detected_filters': parsed_llm.get('detected_attributes', []),
                 'explanation': parsed_llm.get('explanation', '')
             }
-            
-            # Add target filter if detected
-            if parsed_llm.get('target_filter') is not None:
-                result['filters']['target'] = parsed_llm['target_filter']
             
             return result
         

@@ -44,11 +44,23 @@ model = SentenceTransformer(EMBEDDING_MODEL)
 print(f"✅ Model loaded (dimension: {EMBEDDING_DIMENSION})")
 
 # ---------------------------
-# 4️⃣ Load text data
+# 4️⃣ Load text data and metadata
 # ---------------------------
 print(f"\nLoading text data from: {TEXT_DATA_PATH}...")
-df = pd.read_csv(TEXT_DATA_PATH)
-print(f"✅ Loaded {len(df):,} client descriptions")
+df_text = pd.read_csv(TEXT_DATA_PATH)
+print(f"✅ Loaded {len(df_text):,} client descriptions")
+
+# Load original processed data for metadata fields
+print(f"\nLoading metadata from: data/processed/features_for_rag_sampled.csv...")
+df_metadata = pd.read_csv("data/processed/features_for_rag_sampled.csv")
+print(f"✅ Loaded {len(df_metadata):,} client metadata records")
+
+# Merge text with metadata
+df = df_text.merge(df_metadata, on='SK_ID_CURR', how='left', suffixes=('', '_meta'))
+# Drop duplicate TARGET column if exists
+if 'TARGET_meta' in df.columns:
+    df = df.drop(columns=['TARGET_meta'])
+print(f"✅ Merged text with metadata: {len(df):,} records")
 
 # ---------------------------
 # 5️⃣ Generate embeddings and upload to Qdrant
@@ -65,14 +77,35 @@ for idx in tqdm(range(0, len(df), BATCH_SIZE), desc="Processing batches"):
     
     # Create points for Qdrant
     for i, (_, row) in enumerate(batch.iterrows()):
+        # Build payload with filterable metadata fields
+        payload = {
+            'client_id': int(row['SK_ID_CURR']),
+            'target': int(row['TARGET']),
+            'text': row['text_description'],
+            # Categorical fields (exact match)
+            'CODE_GENDER': str(row.get('CODE_GENDER', 'Unknown')),
+            'NAME_FAMILY_STATUS': str(row.get('NAME_FAMILY_STATUS', 'Unknown')),
+            'NAME_EDUCATION_TYPE': str(row.get('NAME_EDUCATION_TYPE', 'Unknown')),
+            'NAME_INCOME_TYPE': str(row.get('NAME_INCOME_TYPE', 'Unknown')),
+            'FLAG_OWN_CAR': str(row.get('FLAG_OWN_CAR', 'N')),
+            'FLAG_OWN_REALTY': str(row.get('FLAG_OWN_REALTY', 'N')),
+            'NAME_HOUSING_TYPE': str(row.get('NAME_HOUSING_TYPE', 'Unknown')),
+            'OCCUPATION_TYPE': str(row.get('OCCUPATION_TYPE', 'Unknown')),
+            'NAME_CONTRACT_TYPE': str(row.get('NAME_CONTRACT_TYPE', 'Unknown')),
+            # Numeric fields (range filtering)
+            'CNT_CHILDREN': int(row.get('CNT_CHILDREN', 0)) if pd.notna(row.get('CNT_CHILDREN')) else 0,
+            'CNT_FAM_MEMBERS': int(row.get('CNT_FAM_MEMBERS', 0)) if pd.notna(row.get('CNT_FAM_MEMBERS')) else 0,
+            'DAYS_BIRTH': int(row.get('DAYS_BIRTH', 0)) if pd.notna(row.get('DAYS_BIRTH')) else 0,
+            'DAYS_EMPLOYED': int(row.get('DAYS_EMPLOYED', 0)) if pd.notna(row.get('DAYS_EMPLOYED')) else 0,
+            'AMT_INCOME_TOTAL': float(row.get('AMT_INCOME_TOTAL', 0)) if pd.notna(row.get('AMT_INCOME_TOTAL')) else 0.0,
+            'AMT_CREDIT': float(row.get('AMT_CREDIT', 0)) if pd.notna(row.get('AMT_CREDIT', 0)) else 0.0,
+            'OWN_CAR_AGE': float(row.get('OWN_CAR_AGE', 0)) if pd.notna(row.get('OWN_CAR_AGE')) else 0.0,
+        }
+        
         point = PointStruct(
             id=int(row['SK_ID_CURR']),
             vector=embeddings[i].tolist(),
-            payload={
-                'client_id': int(row['SK_ID_CURR']),
-                'target': int(row['TARGET']),
-                'text': row['text_description']
-            }
+            payload=payload
         )
         points.append(point)
     
