@@ -115,6 +115,138 @@ class QdrantRetriever:
         query = "Client profile: " + ", ".join(query_parts)
         return self.search(query, top_k=top_k)
     
+    def get_client_by_id(self, client_id):
+        """
+        Retrieve a specific client profile by ID
+        
+        Args:
+            client_id (int): Client ID to retrieve
+        
+        Returns:
+            dict: Client profile with metadata, or None if not found
+        """
+        from qdrant_client.models import Filter, FieldCondition, MatchValue
+        
+        # Search by client_id in payload
+        search_result = self.client.scroll(
+            collection_name=self.collection_name,
+            scroll_filter=Filter(
+                must=[FieldCondition(key="client_id", match=MatchValue(value=client_id))]
+            ),
+            limit=1
+        )
+        
+        if not search_result[0]:  # scroll returns (points, next_offset)
+            return None
+        
+        point = search_result[0][0]
+        return {
+            'client_id': point.payload.get('client_id'),
+            'target': point.payload.get('target'),
+            'text': point.payload.get('text'),
+            'payload': point.payload,
+            'metadata': point.payload
+        }
+    
+    def get_clients_by_ids(self, client_ids):
+        """
+        Retrieve multiple client profiles by IDs
+        
+        Args:
+            client_ids (list): List of client IDs to retrieve
+        
+        Returns:
+            list: List of client profiles
+        """
+        from qdrant_client.models import Filter, FieldCondition, MatchAny
+        
+        # Search by client_id list
+        search_result = self.client.scroll(
+            collection_name=self.collection_name,
+            scroll_filter=Filter(
+                must=[FieldCondition(key="client_id", match=MatchAny(any=client_ids))]
+            ),
+            limit=len(client_ids)
+        )
+        
+        results = []
+        for point in search_result[0]:  # scroll returns (points, next_offset)
+            results.append({
+                'client_id': point.payload.get('client_id'),
+                'target': point.payload.get('target'),
+                'text': point.payload.get('text'),
+                'payload': point.payload,
+                'metadata': point.payload
+            })
+        
+        return results
+    
+    def list_clients(self, offset=0, limit=10, filter_conditions=None):
+        """
+        List clients with pagination and optional filters
+        
+        Args:
+            offset (int): Number of clients to skip
+            limit (int): Maximum number of clients to return
+            filter_conditions (dict): Optional filters (same format as search())
+        
+        Returns:
+            dict: {'clients': [...], 'total': int, 'offset': int, 'limit': int}
+        """
+        from qdrant_client.models import Filter, FieldCondition, MatchValue, Range
+        
+        # Build filter if provided
+        scroll_filter = None
+        if filter_conditions:
+            must_conditions = []
+            for key, value in filter_conditions.items():
+                if key.endswith('_range') and isinstance(value, dict):
+                    field_name = key.replace('_range', '')
+                    range_filter = Range(
+                        gte=value.get('gte'),
+                        lte=value.get('lte')
+                    )
+                    must_conditions.append(
+                        FieldCondition(key=field_name, range=range_filter)
+                    )
+                else:
+                    must_conditions.append(
+                        FieldCondition(key=key, match=MatchValue(value=value))
+                    )
+            
+            scroll_filter = Filter(must=must_conditions)
+        
+        # Scroll through collection
+        search_result = self.client.scroll(
+            collection_name=self.collection_name,
+            scroll_filter=scroll_filter,
+            limit=limit,
+            offset=offset,
+            with_payload=True,
+            with_vectors=False  # Don't need vectors for listing
+        )
+        
+        clients = []
+        for point in search_result[0]:  # scroll returns (points, next_offset)
+            clients.append({
+                'client_id': point.payload.get('client_id'),
+                'target': point.payload.get('target'),
+                'text': point.payload.get('text'),
+                'payload': point.payload,
+                'metadata': point.payload
+            })
+        
+        # Get total count (approximate from collection stats)
+        collection_info = self.client.get_collection(self.collection_name)
+        
+        return {
+            'clients': clients,
+            'total': collection_info.points_count,
+            'offset': offset,
+            'limit': limit,
+            'returned': len(clients)
+        }
+    
     def get_collection_stats(self):
         """Get statistics about the collection"""
         collection_info = self.client.get_collection(self.collection_name)
