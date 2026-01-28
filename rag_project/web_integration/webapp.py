@@ -343,7 +343,6 @@ with col_sidebar:
     
     # Client Information Input
     client_id = st.text_input("Client ID", placeholder="e.g., APP-2024-001")
-    client_name = st.text_input("Client Name", placeholder="John Smith")
     
     col_age, col_income = st.columns(2)
     with col_age:

@@ -1,9 +1,11 @@
 from typing import Dict, Any, List
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, UploadFile, File, Form
 from api.models.requests import TextSearchRequest, MetadataSearchRequest, HybridSearchRequest
 from api.models.responses import SearchResponse, ClientProfile
 from api.config import settings
 from api.dependencies import get_query_router, get_qdrant_retriever, validate_api_key, rate_limiter
+import tempfile
+import os
 
 router = APIRouter(prefix="/search", tags=["search"])
 
@@ -106,3 +108,49 @@ async def search_hybrid(
         total_results=len(profiles),
         filters_applied=req.filters or {},
     )
+
+
+@router.post("/pdf", response_model=SearchResponse)
+async def search_pdf(
+    file: UploadFile = File(...),
+    top_k: int = Form(5),
+    router_dep = Depends(get_query_router),
+    _auth = Depends(validate_api_key),
+    _rl = Depends(rate_limiter),
+):
+    """
+    Search using PDF document.
+    Extracts text from PDF and uses it to find similar clients.
+    """
+    top_k = min(max(top_k, 1), settings.max_top_k)
+    
+    # Save uploaded file temporarily
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+        content = await file.read()
+        tmp_file.write(content)
+        tmp_path = tmp_file.name
+    
+    try:
+        # Process PDF using query router
+        results = router_dep.process_pdf_query(
+            pdf_path=tmp_path,
+            top_k=top_k,
+            filter_conditions=None
+        )
+        profiles = [_to_client_profile(r) for r in results]
+        
+        return SearchResponse(
+            results=profiles,
+            query=f"PDF: {file.filename}",
+            total_results=len(profiles),
+            filters_applied=None,
+            understanding={
+                "query_type": "pdf",
+                "filename": file.filename,
+                "pages_extracted": results[0].get("query_pages_extracted", 0) if results else 0
+            }
+        )
+    finally:
+        # Clean up temporary file
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)

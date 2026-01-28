@@ -1,7 +1,7 @@
 # Qdrant Configuration
 QDRANT_HOST = "localhost"
 QDRANT_PORT = 6333
-COLLECTION_NAME = "client_profiles"
+COLLECTION_NAME = "credit_clients"
 
 EMBEDDING_MODEL = "sentence-transformers/all-mpnet-base-v2"
 EMBEDDING_DIMENSION = 768

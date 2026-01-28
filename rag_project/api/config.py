@@ -24,7 +24,7 @@ class APISettings(BaseSettings):
 
     # Qdrant
     qdrant_url: str = Field(default="http://localhost:6333", env="API_QDRANT_URL")
-    qdrant_collection: str = Field(default="client_profiles", env="API_QDRANT_COLLECTION")
+    qdrant_collection: str = Field(default="credit_clients", env="API_QDRANT_COLLECTION")
     embedding_model: str = Field(default="mistral-embed", env="API_EMBEDDING_MODEL")
 
     # Search defaults
