@@ -1,3 +1,1 @@
-"""
-API endpoints package
-"""
+# FastAPI endpoints package

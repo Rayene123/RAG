@@ -15,6 +15,10 @@ langchain-mistralai>=0.1.0
 langchain-community>=0.0.20
 python-dotenv>=1.0.0
 
+# FastAPI service
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+
 # Progress bars
 tqdm>=4.65.0
 

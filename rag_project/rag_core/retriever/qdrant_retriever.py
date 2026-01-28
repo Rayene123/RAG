@@ -12,13 +12,24 @@ from config.qdrant_config import *
 class QdrantRetriever:
     """Retriever for querying Qdrant vector database"""
     
-    def __init__(self, host=QDRANT_HOST, port=QDRANT_PORT, 
+    def __init__(self, host=QDRANT_HOST, port=QDRANT_PORT,
+                 url: str | None = None,
+                 api_key: str | None = None,
                  collection_name=COLLECTION_NAME, model_name=EMBEDDING_MODEL):
-        """Initialize Qdrant client and embedding model"""
-        self.client = QdrantClient(host=host, port=port)
+        """Initialize Qdrant client and embedding model.
+        If `url` is provided, connect to Qdrant Cloud using `api_key`.
+        Otherwise, fall back to host/port (local or Docker).
+        """
+        if url:
+            self.client = QdrantClient(url=url, api_key=api_key or None)
+            conn_info = f"{url} (cloud)"
+        else:
+            self.client = QdrantClient(host=host, port=port)
+            conn_info = f"{host}:{port}"
         self.collection_name = collection_name
         self.model = SentenceTransformer(model_name)
         print(f"✅ QdrantRetriever initialized")
+        print(f"   Connection: {conn_info}")
         print(f"   Collection: {collection_name}")
         print(f"   Model: {model_name}")
     
@@ -217,11 +228,12 @@ class QdrantRetriever:
             scroll_filter = Filter(must=must_conditions)
         
         # Scroll through collection
+        # Note: Qdrant scroll uses point ID offset, not numeric offset
+        # For simplicity, we'll just use limit and ignore offset (pagination via next_page_offset)
         search_result = self.client.scroll(
             collection_name=self.collection_name,
             scroll_filter=scroll_filter,
             limit=limit,
-            offset=offset,
             with_payload=True,
             with_vectors=False  # Don't need vectors for listing
         )

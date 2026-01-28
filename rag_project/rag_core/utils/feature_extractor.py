@@ -276,6 +276,14 @@ class FeatureExtractor:
         age_match = re.search(r'Age:\s*(\d+)', text, re.IGNORECASE)
         if age_match:
             summary['age'] = int(age_match.group(1))
+
+        gender_match = re.search(r'Gender:\s*([MF])', text, re.IGNORECASE)
+        if gender_match:
+            summary['gender'] = gender_match.group(1).upper()
+
+        education_match = re.search(r'Education Level:\s*([^\n]+)', text, re.IGNORECASE)
+        if education_match:
+            summary['education'] = education_match.group(1).strip()
         
         children_match = re.search(r'Number of Children:\s*(\d+)', text, re.IGNORECASE)
         if children_match:
@@ -284,6 +292,14 @@ class FeatureExtractor:
         employment_match = re.search(r'Years Employed:\s*(\d+)', text, re.IGNORECASE)
         if employment_match:
             summary['years_employed'] = int(employment_match.group(1))
+
+        income_type_match = re.search(r'Income Type:\s*([^\n]+)', text, re.IGNORECASE)
+        if income_type_match:
+            summary['income_type'] = income_type_match.group(1).strip()
+
+        occupation_match = re.search(r'Occupation:\s*([^\n]+)', text, re.IGNORECASE)
+        if occupation_match:
+            summary['occupation'] = occupation_match.group(1).strip()
         
         debt_match = re.search(r'Total Outstanding Debt[:\s]*\$?([\d,]+)', text, re.IGNORECASE)
         if debt_match:
@@ -300,5 +316,37 @@ class FeatureExtractor:
         car_match = re.search(r'Owns a Car:\s*(Yes|No)', text, re.IGNORECASE)
         if car_match:
             summary['owns_car'] = car_match.group(1).lower() == 'yes'
+
+        car_age_match = re.search(r'Owns a Car:\s*Yes\s*\(age:\s*(\d+)\s*years?\)', text, re.IGNORECASE)
+        if car_age_match:
+            summary['car_age_years'] = int(car_age_match.group(1))
+
+        contract_match = re.search(r'Contract Type:\s*([^\n]+)', text, re.IGNORECASE)
+        if contract_match:
+            summary['contract_type'] = contract_match.group(1).strip()
+
+        income_match = re.search(r'Annual Income:\s*\$?([\d,]+)', text, re.IGNORECASE)
+        if income_match:
+            summary['annual_income'] = int(income_match.group(1).replace(',', ''))
+
+        requested_credit_match = re.search(r'Requested Credit Amount[:\s]*\$?([\d,]+)', text, re.IGNORECASE)
+        if requested_credit_match:
+            summary['requested_credit'] = int(requested_credit_match.group(1).replace(',', ''))
+
+        monthly_annuity_match = re.search(r'Monthly Annuity[:\s]*\$?([\d,]+)', text, re.IGNORECASE)
+        if monthly_annuity_match:
+            summary['monthly_annuity'] = int(monthly_annuity_match.group(1).replace(',', ''))
+
+        external_credit_match = re.search(r'Total External Credit Amount[:\s]*\$?([\d,]+)', text, re.IGNORECASE)
+        if external_credit_match:
+            summary['external_credit_amount'] = int(external_credit_match.group(1).replace(',', ''))
+
+        approval_match = re.search(r'Approval Rate[:\s]*([\d.]+)%', text, re.IGNORECASE)
+        if approval_match:
+            summary['approval_rate'] = float(approval_match.group(1))
+
+        active_credits_match = re.search(r'Active External Credits[:\s]*(\d+)', text, re.IGNORECASE)
+        if active_credits_match:
+            summary['active_external_credits'] = int(active_credits_match.group(1))
         
         return summary
