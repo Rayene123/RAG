@@ -40,6 +40,8 @@ Input → Query Router → Shadow Generator → Multimodal Embeddings
 ```
 rag_project/
 ├── config/                    # Qdrant & model settings
+├── agents/                     # risk agent & analysis agent
+├── api/
 ├── data/
 │   ├── raw/                   # Original CSV datasets
 │   └── processed/             # Cleaned & feature-engineered data
@@ -47,6 +49,7 @@ rag_project/
 │   ├── text/from_structured_data/    # CSV → Text
 │   ├── pdf/raw/ & converted/         # PDF documents
 │   └── image/raw/ & converted/       # Images (OCR)
+├── evaluation/               # evaluating the documents retrieved
 ├── preprocessing/             # Data transformation scripts
 │   ├── pdf_to_text/          # PDF pipeline
 │   └── image_to_text/        # Image/OCR pipeline

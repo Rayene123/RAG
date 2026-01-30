@@ -258,6 +258,429 @@ def render_shadow_analysis(num_similar_cases, decision_context, query):
 def render_main_content(num_similar_cases, client_profile):
     """Render complete main content area"""
     
+    # Check if we need to analyze uploaded PDF content
+    if st.session_state.get("analyze_pdf_trigger") and st.session_state.get("analyze_pdf_file"):
+        pdf_file = st.session_state.analyze_pdf_file
+        
+        st.markdown('<div class="section-header" style="color: #BACEFF;">📄 PDF Document Analysis</div>', 
+                    unsafe_allow_html=True)
+        
+        st.markdown(f"""
+        <div style="background: #1E1E1E; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+            <div style="font-size: 16px; font-weight: 600;">📄 {pdf_file.name}</div>
+            <div style="color: #9CA3AF; font-size: 13px; margin-top: 5px;">Size: {pdf_file.size / 1024:.1f} KB</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        with st.spinner("Analyzing PDF content..."):
+            try:
+                api = get_api_client()
+                import sys
+                import os
+                
+                # Add parent directory to path to import rag_core
+                parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                if parent_dir not in sys.path:
+                    sys.path.insert(0, parent_dir)
+                
+                # Extract text from PDF
+                import tempfile
+                
+                # Save PDF temporarily
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+                    pdf_file.seek(0)
+                    tmp_file.write(pdf_file.read())
+                    tmp_path = tmp_file.name
+                
+                # Extract text using the PDF transformer
+                from rag_core.query_processor.transformers.pdf_transformer import PDFTransformer
+                pdf_transformer = PDFTransformer()
+                
+                # Transform returns a list of dictionaries with text and metadata
+                extracted_data = pdf_transformer.transform(tmp_path)
+                
+                # Clean up temp file
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+                
+                if extracted_data:
+                    # Get all text from all pages
+                    all_text = ""
+                    total_pages = 0
+                    
+                    # The transformer might return multiple entries or a single entry with all text
+                    for data_item in extracted_data:
+                        if 'text' in data_item:
+                            all_text += data_item['text'] + "\n"
+                            total_pages = max(total_pages, data_item.get('pages', 1))
+                    
+                    # If no text collected, try first item directly
+                    if not all_text and extracted_data[0].get('text'):
+                        all_text = extracted_data[0]['text']
+                        total_pages = extracted_data[0].get('pages', 1)
+                    
+                    extracted_text = all_text.strip()
+                    pages_extracted = total_pages
+                    
+                    if not extracted_text:
+                        st.error("Failed to extract text from PDF")
+                        return
+                    
+                    st.success(f"✓ Successfully extracted text from {pages_extracted} page(s) ({len(extracted_text)} characters)")
+                    
+                    # Display extracted text
+                    st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+                    st.markdown('<div class="section-header">📝 Extracted Content</div>', unsafe_allow_html=True)
+                    
+                    st.markdown(f"""
+                    <div style="background: #1E1E1E; padding: 12px; border-radius: 8px; margin-bottom: 15px;">
+                        <div style="color: #9CA3AF; font-size: 13px;">
+                            📊 Total characters: {len(extracted_text):,} | Words: {len(extracted_text.split()):,} | Pages: {pages_extracted}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    with st.expander("View Full Text", expanded=True):
+                        st.text_area("Document Text", extracted_text, height=300, key="pdf_text_display")
+                    
+                    # Generate comprehensive AI analysis
+                    st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+                    st.markdown('<div class="section-header">🤖 Comprehensive AI Analysis</div>', unsafe_allow_html=True)
+                    
+                    with st.spinner("Running full analysis with AI agents..."):
+                        try:
+                            api = get_api_client()
+                            
+                            # First, search for similar cases based on the document
+                            search_result = api.search_text(query=extracted_text[:2000], top_k=5, use_llm=True)
+                            
+                            # Display similar cases found
+                            st.markdown("### 📚 Similar Cases Found")
+                            similar_cases_exist = search_result.get("results") and len(search_result["results"]) > 0
+                            
+                            if similar_cases_exist:
+                                similar_count = len(search_result["results"])
+                                st.success(f"Found {similar_count} similar profiles based on document content")
+                                
+                                # Show quick summary
+                                outcomes = [r.get("target", 0) for r in search_result["results"]]
+                                good_count = outcomes.count(0)
+                                default_count = len(outcomes) - good_count
+                                
+                                col1, col2, col3 = st.columns(3)
+                                with col1:
+                                    st.metric("Similar Cases", similar_count)
+                                with col2:
+                                    st.metric("Good Standing", f"{good_count} ({good_count/similar_count*100:.0f}%)")
+                                with col3:
+                                    st.metric("Default/Risk", f"{default_count} ({default_count/similar_count*100:.0f}%)")
+                                
+                                # Display similar cases
+                                render_similar_cases(similar_count, search_result["results"])
+                            else:
+                                st.info("No similar cases found in database - analyzing document independently")
+                            
+                            # Run agent analysis regardless of similar cases
+                            st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+                            st.markdown("### 🤖 AI Agent Analysis")
+                            
+                            # Run historical analysis
+                            with st.spinner("Running Historian Agent..."):
+                                try:
+                                    hist_result = api.analyze_historical(
+                                        decision_context={
+                                            "client_id": None,
+                                            "decision_type": "profile_evaluation",
+                                            "description": f"Evaluate client profile from uploaded document. Document contains: {extracted_text[:800]}"
+                                        },
+                                        query=extracted_text,
+                                        top_k=5
+                                    )
+                                    
+                                    if hist_result:
+                                        st.markdown("**📊 Historical Pattern Analysis:**")
+                                        
+                                        # Try to extract structured output - it might be directly in the result or nested
+                                        structured_data = None
+                                        
+                                        # Check if structured_output exists at top level
+                                        if 'structured_output' in hist_result:
+                                            structured_data = hist_result['structured_output']
+                                        # Otherwise try to parse raw_output JSON
+                                        elif 'raw_output' in hist_result:
+                                            import json
+                                            import re
+                                            raw = hist_result['raw_output']
+                                            # Extract JSON from markdown code blocks
+                                            json_match = re.search(r'```json\s*(\{.*?\})\s*```', raw, re.DOTALL)
+                                            if json_match:
+                                                try:
+                                                    structured_data = json.loads(json_match.group(1))
+                                                except:
+                                                    pass
+                                        
+                                        if structured_data and isinstance(structured_data, dict):
+                                            # Display common patterns
+                                            if structured_data.get('common_patterns'):
+                                                st.markdown("**Common Patterns Identified:**")
+                                                for pattern in structured_data['common_patterns']:
+                                                    st.markdown(f"- {pattern}")
+                                            
+                                            # Display historical outcomes
+                                            if structured_data.get('historical_outcomes'):
+                                                outcomes = structured_data['historical_outcomes']
+                                                col1, col2 = st.columns(2)
+                                                with col1:
+                                                    success_rate = outcomes.get('success_rate', 0) * 100
+                                                    st.metric("Success Rate", f"{success_rate:.0f}%")
+                                                with col2:
+                                                    failure_rate = outcomes.get('failure_rate', 0) * 100
+                                                    st.metric("Failure Rate", f"{failure_rate:.0f}%")
+                                            
+                                            # Display key precedents
+                                            if structured_data.get('key_precedents'):
+                                                st.markdown("**Key Precedents:**")
+                                                for precedent in structured_data['key_precedents']:
+                                                    st.info(precedent)
+                                            
+                                            # Display risk indicators
+                                            if structured_data.get('risk_indicators'):
+                                                st.markdown("**⚠️ Risk Indicators:**")
+                                                for indicator in structured_data['risk_indicators']:
+                                                    st.markdown(f"- ⚠️ {indicator}")
+                                        else:
+                                            # Fallback to raw analysis text
+                                            analysis_text = hist_result.get('analysis', hist_result.get('pattern_analysis', str(hist_result)))
+                                            st.markdown(f"""
+                                            <div style="background: #1E1E1E; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #10b981;">
+                                                <div style="color: #E5E7EB; font-size: 14px; line-height: 1.8; white-space: pre-wrap;">{analysis_text}</div>
+                                            </div>
+                                            """, unsafe_allow_html=True)
+                                    else:
+                                        st.warning("Historian agent did not return analysis")
+                                except Exception as e:
+                                    st.error(f"Historian analysis failed: {str(e)}")
+                            
+                            # Run risk analysis
+                            with st.spinner("Running Risk Agent..."):
+                                try:
+                                    risk_result = api.analyze_risk(
+                                        decision_context={
+                                            "client_id": None,
+                                            "decision_type": "profile_evaluation",
+                                            "description": f"Assess risk for client profile. Full document: {extracted_text}"
+                                        },
+                                        query=extracted_text,
+                                        alternatives=[
+                                            {"name": "APPROVE", "description": "Approve this profile based on analysis"},
+                                            {"name": "REJECT", "description": "Reject this profile due to risk factors"},
+                                            {"name": "CONDITIONAL", "description": "Approve with conditions and monitoring"},
+                                            {"name": "DEFER", "description": "Defer decision pending additional information"}
+                                        ],
+                                        top_k=5
+                                    )
+                                    
+                                    if risk_result:
+                                        st.markdown("**⚠️ Risk Assessment:**")
+                                        
+                                        # Try to extract structured output
+                                        structured_data = None
+                                        
+                                        # Check if structured_output exists at top level
+                                        if 'structured_output' in risk_result:
+                                            structured_data = risk_result['structured_output']
+                                        # Otherwise try to parse raw_output JSON
+                                        elif 'raw_output' in risk_result:
+                                            import json
+                                            import re
+                                            raw = risk_result['raw_output']
+                                            # Extract JSON from markdown code blocks
+                                            json_match = re.search(r'```json\s*(\{.*?\})\s*```', raw, re.DOTALL)
+                                            if json_match:
+                                                try:
+                                                    structured_data = json.loads(json_match.group(1))
+                                                except:
+                                                    pass
+                                        
+                                        # Check for analysis text first (simple summary)
+                                        if risk_result.get('analysis') and isinstance(risk_result['analysis'], str):
+                                            st.markdown(f"""
+                                            <div style="background: #1E1E1E; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #ef4444;">
+                                                <div style="color: #E5E7EB; font-size: 14px; line-height: 1.8;">{risk_result['analysis']}</div>
+                                            </div>
+                                            """, unsafe_allow_html=True)
+                                        
+                                        if structured_data and isinstance(structured_data, dict):
+                                            # Display overall risk summary
+                                            if structured_data.get('overall_risk_summary'):
+                                                st.markdown(f"""
+                                                <div style="background: #1E1E1E; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #ef4444;">
+                                                    <div style="color: #E5E7EB; font-size: 14px; line-height: 1.8;">{structured_data['overall_risk_summary']}</div>
+                                                </div>
+                                                """, unsafe_allow_html=True)
+                                            
+                                            # Display decision alternatives with proper formatting
+                                            if structured_data.get('alternatives_risk_analysis'):
+                                                st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+                                                st.markdown("### 🎯 Decision Alternatives Analysis")
+                                                
+                                                alternatives = structured_data['alternatives_risk_analysis']
+                                                
+                                                for alt in alternatives:
+                                                    alt_id = alt.get('alternative_id', 'Unknown')
+                                                    risk_score = alt.get('risk_score', 'N/A')
+                                                    risk_level = alt.get('risk_level', 'Unknown')
+                                                    default_prob = alt.get('default_probability', 0) * 100
+                                                    
+                                                    # Color based on risk level
+                                                    if risk_level == 'HIGH':
+                                                        color = '#ef4444'
+                                                    elif risk_level == 'MEDIUM':
+                                                        color = '#f59e0b'
+                                                    else:
+                                                        color = '#10b981'
+                                                    
+                                                    with st.expander(f"**{alt_id}** - Risk: {risk_score}/10 ({risk_level})", expanded=False):
+                                                        st.markdown(f"**Default Probability:** {default_prob:.1f}%")
+                                                        
+                                                        if alt.get('risk_factors'):
+                                                            st.markdown("**Risk Factors:**")
+                                                            for factor in alt['risk_factors']:
+                                                                st.markdown(f"- ⚠️ {factor}")
+                                            
+                                            # Display risk comparison
+                                            if structured_data.get('risk_comparison'):
+                                                st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+                                                st.markdown("### 📊 Risk Comparison")
+                                                comparison = structured_data['risk_comparison']
+                                                
+                                                col1, col2, col3 = st.columns(3)
+                                                with col1:
+                                                    st.metric("Lowest Risk", comparison.get('lowest_risk_alternative', 'N/A'))
+                                                with col2:
+                                                    st.metric("Highest Risk", comparison.get('highest_risk_alternative', 'N/A'))
+                                                with col3:
+                                                    st.metric("Risk Spread", f"{comparison.get('risk_spread', 0)}")
+                                                
+                                                if comparison.get('recommendation'):
+                                                    st.success(f"**Recommendation:** {comparison['recommendation']}")
+                                            
+                                            # Display mitigation strategies
+                                            if structured_data.get('mitigation_strategies'):
+                                                st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+                                                st.markdown("### 🛡️ Risk Mitigation Strategies")
+                                                
+                                                for strategy in structured_data['mitigation_strategies']:
+                                                    with st.expander(f"{strategy.get('alternative_id', 'Strategy')} - {strategy.get('risk_factor', 'Risk Factor')}"):
+                                                        st.markdown(f"**Strategy:** {strategy.get('strategy', 'N/A')}")
+                                                        st.markdown(f"**Expected Impact:** {strategy.get('expected_impact', 'N/A')}")
+                                        else:
+                                            # Fallback to raw text
+                                            risk_analysis_text = risk_result.get('analysis', risk_result.get('risk_assessment', str(risk_result)))
+                                            st.markdown(f"""
+                                            <div style="background: #1E1E1E; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #ef4444;">
+                                                <div style="color: #E5E7EB; font-size: 14px; line-height: 1.8; white-space: pre-wrap;">{risk_analysis_text}</div>
+                                            </div>
+                                            """, unsafe_allow_html=True)
+                                    else:
+                                        st.warning("Risk agent did not return analysis")
+                                except Exception as e:
+                                    st.error(f"Risk analysis failed: {str(e)}")
+                                    
+                        except Exception as e:
+                            st.error(f"Analysis failed: {str(e)}")
+                            import traceback
+                            with st.expander("Error Details"):
+                                st.code(traceback.format_exc())
+                        
+                        # Fallback: Show basic statistics
+                    
+                    # Find similar cases based on PDF content
+                    st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+                    st.markdown('<div class="section-header">🔍 Similar Cases Found</div>', unsafe_allow_html=True)
+                    
+                    pdf_search_results = st.session_state.get("pdf_search_results", [])
+                    if pdf_search_results:
+                        render_similar_cases(len(pdf_search_results), pdf_search_results)
+                    else:
+                        st.info("Click 'Search' button to find similar clients")
+                    
+                else:
+                    st.error("Failed to extract text from PDF")
+                    
+            except Exception as e:
+                st.error(f"Analysis failed: {str(e)}")
+        
+        # Back button
+        if st.button("← Back to Upload"):
+            st.session_state.analyze_pdf_trigger = False
+            st.session_state.analyze_pdf_file = None
+            st.rerun()
+        
+        return
+    
+    # Check if we need to analyze a client from PDF/image search
+    if st.session_state.get("analyze_trigger") and st.session_state.get("analyze_client_id"):
+        client_id = st.session_state.analyze_client_id
+        
+        st.markdown('<div class="section-header" style="color: #BACEFF;">📊 Client Analysis</div>', 
+                    unsafe_allow_html=True)
+        
+        with st.spinner(f"Running complete analysis for Client {client_id}..."):
+            try:
+                api = get_api_client()
+                
+                # Get analyzed profile with similar cases and AI insights
+                analysis = api.get_analyzed_profile(client_id)
+                
+                if analysis:
+                    st.success(f"✓ Analysis complete for Client {client_id}")
+                    
+                    # Display client profile
+                    profile = analysis.get("profile", {})
+                    if profile:
+                        target = profile.get("target", 0)
+                        outcome_color = "#16a34a" if target == 0 else "#dc2626"
+                        outcome_text = "Good Standing" if target == 0 else "Default/Rejected"
+                        
+                        st.markdown(f"""
+                        <div style="background: #1E1E1E; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                            <div style="font-size: 18px; font-weight: 600; margin-bottom: 10px;">Client {client_id}</div>
+                            <div style="color: {outcome_color}; font-weight: 500;">Status: {outcome_text}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        profile_text = profile.get("text", "No description available")
+                        st.markdown("**📄 Profile:**")
+                        st.markdown(f'<div style="background: #0D1117; padding: 15px; border-radius: 8px; font-size: 13px; line-height: 1.6; max-height: 200px; overflow-y: auto; color: #E5E7EB; border-left: 3px solid #6366F1;">{profile_text}</div>', unsafe_allow_html=True)
+                    
+                    # Display similar cases
+                    similar_cases = analysis.get("similar_cases", [])
+                    if similar_cases:
+                        render_similar_cases(len(similar_cases), similar_cases)
+                    
+                    # Display AI analysis if available
+                    if analysis.get("historical_analysis"):
+                        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+                        st.markdown('<div class="section-header">🤖 AI Analysis</div>', unsafe_allow_html=True)
+                        st.info(analysis["historical_analysis"])
+                    
+                    # Store in session
+                    st.session_state.last_analysis = analysis
+                else:
+                    st.error("Failed to retrieve analysis")
+                    
+            except Exception as e:
+                st.error(f"Analysis failed: {str(e)}")
+        
+        # Clear the trigger
+        if st.button("Back to Search"):
+            st.session_state.analyze_trigger = False
+            st.session_state.analyze_client_id = None
+            st.rerun()
+        
+        return
+    
     # Mode selector
     mode = st.radio(
         "Select Mode",
@@ -273,12 +696,71 @@ def render_main_content(num_similar_cases, client_profile):
         st.markdown('<div class="section-header" style="color: #BACEFF;">🔍 Search Similar Clients</div>', 
                     unsafe_allow_html=True)
         
+        # Display selected client profile if one is selected
+        if st.session_state.get("current_profile"):
+            profile = st.session_state.current_profile
+            client_id = profile.get("client_id", "Unknown")
+            target = profile.get("target", 0)
+            outcome_color = "#16a34a" if target == 0 else "#dc2626"
+            outcome_text = "Good Standing" if target == 0 else "Default/Rejected"
+            
+            with st.expander(f"📋 Selected Client: {client_id}", expanded=True):
+                st.markdown(f"""
+                <div style="background: #1E1E1E; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                    <div style="font-size: 18px; font-weight: 600; margin-bottom: 10px;">Client {client_id}</div>
+                    <div style="color: {outcome_color}; font-weight: 500; margin-bottom: 15px;">Status: {outcome_text}</div>
+                """, unsafe_allow_html=True)
+                
+                # Display profile text
+                profile_text = profile.get("text", "No description available")
+                st.markdown("**📄 Profile Details:**")
+                st.markdown(f'<div style="background: #0D1117; padding: 15px; border-radius: 8px; font-size: 13px; line-height: 1.6; max-height: 250px; overflow-y: auto; color: #E5E7EB; border-left: 3px solid #6366F1;">{profile_text}</div>', unsafe_allow_html=True)
+                
+                # Display metadata if available
+                metadata = profile.get("metadata", {})
+                if metadata:
+                    st.markdown("**📊 Key Metrics:**")
+                    cols = st.columns(4)
+                    metric_idx = 0
+                    key_metrics = ["AMT_INCOME_TOTAL", "AMT_CREDIT", "AMT_ANNUITY", "DAYS_EMPLOYED"]
+                    for key in key_metrics:
+                        if key in metadata and metadata[key] is not None:
+                            with cols[metric_idx % 4]:
+                                label = key.replace("AMT_", "").replace("DAYS_", "").replace("_", " ").title()
+                                value = metadata[key]
+                                if "AMT" in key:
+                                    st.metric(label, f"${value:,.0f}")
+                                else:
+                                    st.metric(label, f"{abs(int(value))} days")
+                            metric_idx += 1
+                
+                st.markdown("</div>", unsafe_allow_html=True)
+                
+                # Clear button
+                if st.button("Clear Selection", key="clear_profile"):
+                    st.session_state.current_profile = None
+                    st.session_state.current_client_id = None
+                    st.rerun()
+        
         search_query = st.text_area(
             "Search Query",
             placeholder="e.g., 'High income earners over 300k with stable employment' or 'Clients with good credit history'",
             height=80,
             key="search_input"
         )
+        
+        # Show active filters if any
+        active_filters = []
+        if st.session_state.get("filter_age_min") is not None:
+            active_filters.append(f"Age: {st.session_state.filter_age_min}-{st.session_state.filter_age_max}")
+        if st.session_state.get("filter_income_min") is not None:
+            active_filters.append(f"Income: ${st.session_state.filter_income_min:,}-${st.session_state.filter_income_max:,}")
+        if st.session_state.get("filter_target") is not None:
+            outcome = "Good Standing" if st.session_state.filter_target == 0 else "Default/Risk"
+            active_filters.append(f"Outcome: {outcome}")
+        
+        if active_filters:
+            st.info(f"🔍 Active filters: {', '.join(active_filters)}")
         
         col_search, col_clear = st.columns([3, 1])
         with col_search:
@@ -289,11 +771,35 @@ def render_main_content(num_similar_cases, client_profile):
         
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
-        if search_btn and search_query:
+        if search_btn and (search_query or active_filters):
             api = get_api_client()
+            
+            # Build filter dict from session state
+            filters = {}
+            if st.session_state.get("filter_age_min") is not None:
+                filters["DAYS_BIRTH"] = {
+                    "gte": -(st.session_state.filter_age_max * 365),  # Qdrant uses negative days
+                    "lte": -(st.session_state.filter_age_min * 365)
+                }
+            if st.session_state.get("filter_income_min") is not None:
+                filters["AMT_INCOME_TOTAL"] = {
+                    "gte": st.session_state.filter_income_min,
+                    "lte": st.session_state.filter_income_max
+                }
+            if st.session_state.get("filter_target") is not None:
+                filters["TARGET"] = st.session_state.filter_target
+            
             with st.spinner("Searching for similar clients..."):
                 try:
-                    search_result = api.search_text(query=search_query, top_k=num_similar_cases, use_llm=True)
+                    if filters and search_query:
+                        # Use hybrid search with both query and filters
+                        search_result = api.search_hybrid(query=search_query, filters=filters, top_k=num_similar_cases)
+                    elif filters:
+                        # Use metadata search only
+                        search_result = api.search_metadata(filters=filters, top_k=num_similar_cases)
+                    else:
+                        # Use text search only
+                        search_result = api.search_text(query=search_query, top_k=num_similar_cases, use_llm=True)
                     if search_result and search_result.get("results"):
                         similar_cases_data = search_result["results"]
                         st.success(f"✓ Found {len(similar_cases_data)} matching clients")

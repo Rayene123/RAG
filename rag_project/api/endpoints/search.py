@@ -154,3 +154,56 @@ async def search_pdf(
         # Clean up temporary file
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
+
+
+@router.post("/image", response_model=SearchResponse)
+async def search_image(
+    file: UploadFile = File(...),
+    top_k: int = Form(5),
+    router_dep = Depends(get_query_router),
+    _auth = Depends(validate_api_key),
+    _rl = Depends(rate_limiter),
+):
+    """
+    Search using image document.
+    Extracts text from image using OCR and uses it to find similar clients.
+    """
+    top_k = min(max(top_k, 1), settings.max_top_k)
+    
+    # Validate image type
+    allowed_extensions = {'.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.tif'}
+    file_ext = os.path.splitext(file.filename)[1].lower()
+    if file_ext not in allowed_extensions:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail=f"Invalid image type. Allowed: {allowed_extensions}")
+    
+    # Save uploaded file temporarily
+    with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_file:
+        content = await file.read()
+        tmp_file.write(content)
+        tmp_path = tmp_file.name
+    
+    try:
+        # Process image using query router
+        results = router_dep.process_image_query(
+            image_path=tmp_path,
+            top_k=top_k,
+            filter_conditions=None
+        )
+        profiles = [_to_client_profile(r) for r in results]
+        
+        return SearchResponse(
+            results=profiles,
+            query=f"Image: {file.filename}",
+            total_results=len(profiles),
+            filters_applied=None,
+            understanding={
+                "query_type": "image",
+                "filename": file.filename,
+                "ocr_processed": True
+            }
+        )
+    finally:
+        # Clean up temporary file
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)

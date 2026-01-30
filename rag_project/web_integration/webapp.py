@@ -430,11 +430,6 @@ with col_sidebar:
         help="Your acceptable risk level (0=Conservative, 100=Aggressive)"
     )
     
-    search_type = st.selectbox(
-        "Multimodal Search",
-        ["Text + Numbers", "Text + Images", "Full Multimodal"],
-        help="Types of data to include in analysis"
-    )
     
     st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
     

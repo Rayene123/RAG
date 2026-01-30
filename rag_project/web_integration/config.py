@@ -30,5 +30,7 @@ DEFAULT_SESSION_STATE = {
     "current_profile": None,
     "last_similar_cases": None,
     "pdf_search_results": None,
-    "last_pdf_query": None
+    "last_pdf_query": None,
+    "image_search_results": None,
+    "last_image_query": None
 }

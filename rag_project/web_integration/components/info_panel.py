@@ -39,14 +39,25 @@ def render_risk_metrics():
     if last_analysis and last_analysis.get("risk_analysis"):
         risk_data = last_analysis["risk_analysis"]
         # Extract risk metrics if available
-        overall_risk = risk_data.get("overall_risk_score", 42)
-        default_prob = risk_data.get("default_probability", 8.2)
-        confidence = last_analysis.get("avg_similarity", 0.78) * 100
+        overall_risk = risk_data.get("overall_risk_score", None)
+        default_prob = risk_data.get("default_probability", None)
+        confidence = last_analysis.get("avg_similarity", None)
+        if confidence:
+            confidence = confidence * 100
     else:
-        # Default values
-        overall_risk = 42
-        default_prob = 8.2
-        confidence = 78
+        # No data available - show message instead
+        overall_risk = None
+        default_prob = None
+        confidence = None
+    
+    # Only show metrics if we have analysis data
+    if overall_risk is None and default_prob is None and confidence is None:
+        st.markdown("""
+        <div style="font-size: 12px; color: #9CA3AF; text-align: center; padding: 20px;">
+            Run a decision analysis to see risk metrics
+        </div>
+        """, unsafe_allow_html=True)
+        return
     
     st.markdown(f"""
     <div class="info-card">
@@ -131,6 +142,8 @@ def render_analysis_summary():
     """, unsafe_allow_html=True)
 
 
+
+
 def render_best_practices():
     """Render decision-making best practices"""
     st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
@@ -197,6 +210,7 @@ def render_info_panel():
     """Render complete right info panel"""
     render_risk_metrics()
     render_data_quality()
+    render_metadata_filters()
     render_analysis_summary()
     render_best_practices()
     render_documentation()

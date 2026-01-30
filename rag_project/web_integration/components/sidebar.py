@@ -152,19 +152,30 @@ def render_pdf_upload():
                         results = api.search_pdf(uploaded_file, top_k=5)
                     
                     if results and results.get("results"):
-                        st.success(f"✓ Found {results.get('total_results', 0)} similar cases")
                         st.session_state.pdf_search_results = results["results"]
                         st.session_state.last_pdf_query = uploaded_file.name
+                        st.session_state.pdf_understanding = results.get("understanding")
                         
-                        # Show understanding info if available
-                        if results.get("understanding"):
-                            understanding = results["understanding"]
-                            st.info(f"📄 Extracted {understanding.get('pages_extracted', 0)} page(s)")
+                        # Show results summary in a row
+                        col_found, col_pages = st.columns(2)
+                        with col_found:
+                            st.success(f"✓ Found {results.get('total_results', 0)} similar cases")
+                        with col_pages:
+                            if results.get("understanding"):
+                                understanding = results["understanding"]
+                                st.info(f"📄 Extracted {understanding.get('pages_extracted', 0)} page(s)")
                     else:
                         st.warning("No similar cases found")
                         
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
+        
+        # Add "Analyze PDF" button
+        st.markdown('<div style="margin-top: 10px;"></div>', unsafe_allow_html=True)
+        if st.button("📊 Analyze This PDF", key="analyze_pdf_content", use_container_width=True):
+            st.session_state.analyze_pdf_file = uploaded_file
+            st.session_state.analyze_pdf_trigger = True
+            st.rerun()
         
         # Display results if available
         if st.session_state.get("pdf_search_results"):
@@ -180,12 +191,150 @@ def render_pdf_upload():
                 outcome_color = "#16a34a" if target == 0 else "#dc2626"
                 outcome_text = "Good" if target == 0 else "Default"
                 
+                # Make profile clickable with view and analyze buttons
+                col_info, col_view, col_analyze = st.columns([3, 1, 1])
+                with col_info:
+                    st.markdown(f"""
+                    <div style="background: #F9FAFB; padding: 8px; border-radius: 6px; margin-bottom: 6px; font-size: 11px;">
+                        <div style="font-weight: 600; color: #1F2937;">Client {client_id}</div>
+                        <div style="color: #6B7280;">Similarity: {similarity}% | Outcome: <span style="color: {outcome_color};">{outcome_text}</span></div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with col_view:
+                    if st.button("👁️", key=f"view_pdf_client_{client_id}_{idx}", help="View profile details"):
+                        st.session_state.current_client_id = client_id
+                        st.session_state.current_profile = result
+                        st.rerun()
+                with col_analyze:
+                    if st.button("📊", key=f"analyze_pdf_client_{client_id}_{idx}", help="Run full analysis"):
+                        st.session_state.analyze_client_id = client_id
+                        st.session_state.analyze_trigger = True
+                        st.rerun()
+
+
+def render_image_upload():
+    """Render image upload and search section"""
+    st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-header" style="color: #BACEFF;">🖼️ Image Search</div>', 
+                unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div style="font-size: 12px; color: #6B7280; margin-bottom: 10px;">
+        Upload one or multiple images to find similar clients based on combined content (OCR)
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Image Upload - Now supports multiple files
+    uploaded_files = st.file_uploader(
+        "📤 Upload Image Document(s)",
+        type=['png', 'jpg', 'jpeg', 'bmp', 'tiff'],
+        key="image_upload",
+        accept_multiple_files=True,
+        help="Upload one or more images, then click the Search button"
+    )
+    
+    if uploaded_files:
+        # Display all uploaded files
+        total_size = sum(f.size for f in uploaded_files) / 1024
+        
+        col_info, col_search = st.columns([3, 1])
+        
+        with col_info:
+            if len(uploaded_files) == 1:
                 st.markdown(f"""
-                <div style="background: #F9FAFB; padding: 8px; border-radius: 6px; margin-bottom: 6px; font-size: 11px;">
-                    <div style="font-weight: 600; color: #1F2937;">Client {client_id}</div>
-                    <div style="color: #6B7280;">Similarity: {similarity}% | Outcome: <span style="color: {outcome_color};">{outcome_text}</span></div>
+                <div style="background: #F9FAFB; padding: 10px; border-radius: 6px; font-size: 12px;">
+                    <strong>🖼️ {uploaded_files[0].name}</strong><br/>
+                    <span style="color: #6B7280;">Size: {uploaded_files[0].size / 1024:.1f} KB</span>
                 </div>
                 """, unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                <div style="background: #F9FAFB; padding: 10px; border-radius: 6px; font-size: 12px;">
+                    <strong>🖼️ {len(uploaded_files)} images selected</strong><br/>
+                    <span style="color: #6B7280;">Total size: {total_size:.1f} KB</span>
+                </div>
+                """, unsafe_allow_html=True)
+        
+        with col_search:
+            st.markdown('<div style="margin-top: 6px;"></div>', unsafe_allow_html=True)
+            if st.button("🔍 Search", key="image_search_btn", use_container_width=True, type="primary"):
+                try:
+                    from api_client import get_api_client
+                    api = get_api_client()
+                    
+                    with st.spinner(f"Extracting text from {len(uploaded_files)} image(s) and searching..."):
+                        # Process multiple images
+                        all_results = []
+                        combined_text = []
+                        
+                        for uploaded_file in uploaded_files:
+                            # Reset file pointer
+                            uploaded_file.seek(0)
+                            
+                            # Search using Image
+                            results = api.search_image(uploaded_file, top_k=5)
+                            
+                            if results and results.get("results"):
+                                all_results.extend(results["results"])
+                    
+                    if all_results:
+                        # Remove duplicates and sort by score
+                        seen_clients = {}
+                        for result in all_results:
+                            client_id = result.get("client_id")
+                            score = result.get("score", 0)
+                            if client_id not in seen_clients or score > seen_clients[client_id].get("score", 0):
+                                seen_clients[client_id] = result
+                        
+                        # Sort by score descending
+                        unique_results = sorted(seen_clients.values(), 
+                                              key=lambda x: x.get("score", 0), 
+                                              reverse=True)[:5]
+                        
+                        st.session_state.image_search_results = unique_results
+                        st.session_state.last_image_query = f"{len(uploaded_files)} image(s)"
+                        
+                        # Show results summary
+                        st.success(f"✓ Found {len(unique_results)} similar cases from {len(uploaded_files)} image(s)")
+                    else:
+                        st.warning("No similar cases found")
+                        
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
+        
+        # Display results if available
+        if st.session_state.get("image_search_results"):
+            st.markdown('<div style="margin-top: 15px;"><small style="color: #6B7280;">Search Results</small></div>', 
+                       unsafe_allow_html=True)
+            
+            for idx, result in enumerate(st.session_state.image_search_results[:3], 1):
+                score = result.get("score", 0)
+                similarity = int(score * 100) if score and score <= 1 else int(score) if score else 85
+                client_id = result.get("client_id", "Unknown")
+                target = result.get("target", 0)
+                
+                outcome_color = "#16a34a" if target == 0 else "#dc2626"
+                outcome_text = "Good" if target == 0 else "Default"
+                
+                # Make profile clickable with view and analyze buttons
+                col_info, col_view, col_analyze = st.columns([3, 1, 1])
+                with col_info:
+                    st.markdown(f"""
+                    <div style="background: #F9FAFB; padding: 8px; border-radius: 6px; margin-bottom: 6px; font-size: 11px;">
+                        <div style="font-weight: 600; color: #1F2937;">Client {client_id}</div>
+                        <div style="color: #6B7280;">Similarity: {similarity}% | Outcome: <span style="color: {outcome_color};">{outcome_text}</span></div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with col_view:
+                    if st.button("👁️", key=f"view_image_client_{client_id}_{idx}", help="View profile details"):
+                        st.session_state.current_client_id = client_id
+                        st.session_state.current_profile = result
+                        st.rerun()
+                with col_analyze:
+                    if st.button("📊", key=f"analyze_image_client_{client_id}_{idx}", help="Run full analysis"):
+                        st.session_state.analyze_client_id = client_id
+                        st.session_state.analyze_trigger = True
+                        st.rerun()
 
 
 def render_analysis_settings():
@@ -210,34 +359,19 @@ def render_analysis_settings():
         help="Your acceptable risk level (0=Conservative, 100=Aggressive)"
     )
     
-    search_type = st.selectbox(
-        "Multimodal Search",
-        ["Text + Numbers", "Text + Images", "Full Multimodal"],
-        help="Types of data to include in analysis"
-    )
     
     return {
         "num_similar_cases": num_similar_cases,
         "risk_threshold": risk_threshold,
-        "search_type": search_type
     }
 
 
 def render_advanced_options():
     """Render advanced analysis options"""
     st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-    
-    with st.expander("🔧 Advanced Options"):
-        st.markdown("**Query Understanding**")
-        use_llm = st.checkbox("Enable LLM Query Understanding", value=True, 
-                             help="Use AI to better understand and parse your query")
-        
-        st.markdown("**Display Options**")
-        show_details = st.checkbox("Show Detailed Analysis", value=True)
-        
-        return {
-            "use_llm": use_llm,
-            "show_details": show_details
+    return {
+            "use_llm": True,
+            "show_details": True
         }
 
 
@@ -245,6 +379,7 @@ def render_left_sidebar():
     """Render complete left sidebar"""
     client_profile = render_client_profile()
     render_pdf_upload()
+    render_image_upload()
     settings = render_analysis_settings()
     advanced = render_advanced_options()
     
