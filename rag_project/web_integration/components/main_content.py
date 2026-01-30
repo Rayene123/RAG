@@ -16,8 +16,7 @@ def render_decision_templates():
         }
         for template_name, template_text in templates.items():
             if st.button(template_name, key=f"tmpl_{template_name}", use_container_width=True):
-                st.session_state.last_query = template_text
-                st.session_state.decision_input = template_text  # Update textarea key directly
+                st.session_state.decision_input = template_text  # Update textarea directly via its key
                 st.rerun()
 
 
@@ -325,17 +324,19 @@ def render_main_content(num_similar_cases, client_profile):
         st.markdown('<div class="section-header" style="color: #BACEFF;">⚖️ Generate Shadow Decisions</div>', 
                     unsafe_allow_html=True)
         
-        # Initialize last_query if not exists
-        if 'last_query' not in st.session_state:
-            st.session_state.last_query = ""
+        # Initialize decision_input in session state if not exists
+        if 'decision_input' not in st.session_state:
+            st.session_state.decision_input = ""
+        
+        # Render templates BEFORE the textarea so we can update session state
+        render_decision_templates()
         
         decision_context = st.text_area(
             "Decision Context",
             placeholder="Describe the decision to analyze (e.g., 'Should I approve a $50k loan for Client 100021?')",
             height=80,
             label_visibility="collapsed",
-            key="decision_input",
-            value=st.session_state.last_query
+            key="decision_input"
         )
         
         col_analyze, col_reset = st.columns([3, 1])
@@ -348,11 +349,9 @@ def render_main_content(num_similar_cases, client_profile):
         
         with col_reset:
             if st.button("Reset", use_container_width=True):
-                st.session_state.last_query = ""
+                st.session_state.decision_input = ""
                 st.session_state.last_analysis = None
                 st.rerun()
-        
-        render_decision_templates()
         
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         

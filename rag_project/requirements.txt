@@ -33,3 +33,7 @@ pdfplumber>=0.10.0
 PyMuPDF>=1.23.0
 easyocr>=1.7.0  # Optional but recommended for fallback OCR
 fpdf>=1.7.2  # For PDF generation
+
+# RAGAS - RAG evaluation framework
+ragas>=0.1.0
+datasets>=2.14.0

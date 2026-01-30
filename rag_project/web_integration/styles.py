@@ -6,7 +6,7 @@ CSS_STYLES = """
 <style>
     /* Decision Shadows color palette */
     :root {
-        --primary: #1e40af;
+        --primary: #eab308;
         --success: #16a34a;
         --warning: #ea580c;
         --error: #dc2626;
@@ -19,11 +19,11 @@ CSS_STYLES = """
     
     /* Header styling */
     .header-container {
-        background: linear-gradient(135deg, #1e40af 0%, #0891b2 100%);
+        background: linear-gradient(135deg, #eab308 0%, #f59e0b 100%);
         padding: 25px 30px;
         border-radius: 12px;
         margin-bottom: 30px;
-        box-shadow: 0 4px 12px rgba(30, 64, 175, 0.15);
+        box-shadow: 0 4px 12px rgba(234, 179, 8, 0.25);
         color: white;
     }
     
@@ -65,7 +65,7 @@ CSS_STYLES = """
     
     .result-card:hover {
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-        border-color: #0066CC;
+        border-color: #eab308;
     }
     
     .result-title {
@@ -99,11 +99,11 @@ CSS_STYLES = """
     
     /* Upload area */
     .upload-box {
-        border: 2px dashed #0066CC;
+        border: 2px dashed #eab308;
         border-radius: 10px;
         padding: 20px;
         text-align: center;
-        background: #F0F9FF;
+        background: #fef9e7;
         margin-bottom: 15px;
     }
     
@@ -157,7 +157,7 @@ CSS_STYLES = """
         padding: 15px;
         border-radius: 10px;
         margin-bottom: 12px;
-        border-left: 4px solid #0066CC;
+        border-left: 4px solid #eab308;
     }
     
     .info-label {
@@ -175,7 +175,7 @@ CSS_STYLES = """
     
     /* Buttons */
     .stButton > button {
-        background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%);
+        background: linear-gradient(135deg, #eab308 0%, #d97706 100%);
         color: white;
         border: none;
         font-weight: 600;
@@ -184,7 +184,7 @@ CSS_STYLES = """
     }
     
     .stButton > button:hover {
-        box-shadow: 0 4px 12px rgba(30, 64, 175, 0.35);
+        box-shadow: 0 4px 12px rgba(234, 179, 8, 0.35);
     }
     
     /* Shadow decision badges */
@@ -207,9 +207,9 @@ CSS_STYLES = """
     }
     
     .shadow-defer {
-        background: #e0e7ff;
-        border-left: 4px solid #1e40af;
-        color: #312e81;
+        background: #fef9e7;
+        border-left: 4px solid #eab308;
+        color: #713f12;
     }
     
     /* Risk/Bias indicators */
@@ -245,8 +245,8 @@ CSS_STYLES = """
     }
     
     .comparison-card:hover {
-        border-color: #1e40af;
-        box-shadow: 0 4px 12px rgba(30, 64, 175, 0.1);
+        border-color: #eab308;
+        box-shadow: 0 4px 12px rgba(234, 179, 8, 0.15);
     }
     
     .comparison-header {
@@ -264,8 +264,8 @@ CSS_STYLES = """
     
     .stTextInput > div > div > input:focus,
     .stTextArea > div > div > textarea:focus {
-        border-color: #0066CC;
-        box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+        border-color: #eab308;
+        box-shadow: 0 0 0 3px rgba(234, 179, 8, 0.15);
     }
     
     /* Empty state */
