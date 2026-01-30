@@ -11,13 +11,22 @@ def render_client_profile():
     st.markdown('<div class="section-header" style="color: #BACEFF;">👤 Client Profile</div>', 
                 unsafe_allow_html=True)
     
-    # Client ID search
-    col_id, col_search = st.columns([3, 1])
-    with col_id:
-        client_id_input = st.text_input("Client ID", placeholder="e.g., 100021 or APP-2024-001", key="client_id_input")
-    with col_search:
-        st.markdown('<div style="margin-top: 32px;"></div>', unsafe_allow_html=True)
-        search_btn = st.button("🔍", help="Search for client")
+    # Search mode selection
+    search_mode = st.radio("Search by:", ["Client ID", "Filters"], horizontal=True, key="profile_search_mode")
+    
+    if search_mode == "Client ID":
+        # Client ID search
+        col_id, col_search = st.columns([3, 1])
+        with col_id:
+            # Pre-fill with current client ID if one is loaded
+            default_id = str(st.session_state.get("current_client_id", "")) if st.session_state.get("current_client_id") else ""
+            client_id_input = st.text_input("Client ID", value=default_id, placeholder="e.g., 100021 or APP-2024-001", key="client_id_input")
+        with col_search:
+            st.markdown('<div style="margin-top: 32px;"></div>', unsafe_allow_html=True)
+            search_btn = st.button("🔍", help="Search for client", key="id_search_btn")
+    else:
+        search_btn = False
+        client_id_input = None
     
     # Initialize profile data
     client_id = None
@@ -79,6 +88,12 @@ def render_client_profile():
         income = metadata.get("AMT_INCOME_TOTAL", 50000)
         education = metadata.get("NAME_EDUCATION_TYPE", "High School")
         employment = metadata.get("NAME_INCOME_TYPE", "Stable")
+        
+        # Display client description/text if available
+        client_text = profile_data.get("text", "")
+        if client_text and search_mode == "Client ID":
+            with st.expander("📄 Client Profile Document", expanded=True):
+                st.markdown(f'<div style="background: #1E1E1E; padding: 15px; border-radius: 8px; font-size: 13px; line-height: 1.6; max-height: 400px; overflow-y: auto; color: #E5E7EB;">{client_text}</div>', unsafe_allow_html=True)
     
     # Manual input fields (can be edited even after loading)
     if not client_id and client_id_input:
@@ -96,6 +111,76 @@ def render_client_profile():
     employment = st.selectbox("Employment Status", ["Stable", "Self-Employed", "Contract", "Seeking", "Working", "Commercial associate", "Pensioner", "State servant", "Unemployed"], 
                               index=0 if not employment else (["Stable", "Self-Employed", "Contract", "Seeking", "Working", "Commercial associate", "Pensioner", "State servant", "Unemployed"].index(employment) if employment in ["Stable", "Self-Employed", "Contract", "Seeking", "Working", "Commercial associate", "Pensioner", "State servant", "Unemployed"] else 0),
                               key="employment_input")
+    
+    # Filter search button (for "Filters" mode)
+    if st.session_state.get("profile_search_mode") == "Filters":
+        if st.button("🔍 Search by Filters", use_container_width=True, key="filter_search_btn"):
+            try:
+                api = get_api_client()
+                
+                # Build filter dict for API
+                filters = {}
+                
+                # Age filter (convert to DAYS_BIRTH) - must use _range suffix
+                filters["DAYS_BIRTH_range"] = {
+                    "gte": -(age + 5) * 365,  # Allow ±5 year range
+                    "lte": -(age - 5) * 365
+                }
+                
+                # Income filter - must use _range suffix
+                filters["AMT_INCOME_TOTAL_range"] = {
+                    "gte": income * 0.8,  # Allow ±20% range
+                    "lte": income * 1.2
+                }
+                
+                # Education filter (if not default)
+                if education != "High School":
+                    filters["NAME_EDUCATION_TYPE"] = education
+                
+                # Employment filter (if not default)
+                if employment != "Stable":
+                    filters["NAME_INCOME_TYPE"] = employment
+                
+                with st.spinner("Searching for matching clients..."):
+                    # Use metadata search for filter-only search
+                    results = api.search_metadata(filters=filters, top_k=10)
+                
+                if results and results.get("results"):
+                    st.success(f"✓ Found {len(results['results'])} matching clients")
+                    st.session_state.filter_search_results = results
+                    
+                    # Display results
+                    with st.expander(f"📊 {len(results['results'])} Matching Clients", expanded=True):
+                        for idx, result in enumerate(results["results"][:5], 1):  # Show top 5
+                            result_client_id = result.get("client_id", "Unknown")
+                            similarity = result.get("score", result.get("similarity", 0))
+                            result_metadata = result.get("metadata", {})
+                            result_age = int(result_metadata.get("DAYS_BIRTH", -12775) / -365) if result_metadata.get("DAYS_BIRTH") else "N/A"
+                            result_income = result_metadata.get("AMT_INCOME_TOTAL", "N/A")
+                            
+                            st.markdown(f"""
+                            <div style="background: #1E1E1E; padding: 10px; border-radius: 5px; margin-bottom: 8px;">
+                                <div style="color: #60A5FA; font-weight: 600;">Client {result_client_id}</div>
+                                <div style="font-size: 12px; color: #9CA3AF;">
+                                    Age: {result_age} | Income: ${result_income:,} | Match: {similarity*100:.1f}%
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                            # Add button to view this client
+                            if st.button(f"👁️ View Client {result_client_id}", key=f"view_filter_{result_client_id}", use_container_width=True):
+                                # Fetch full profile from API
+                                profile_data = api.get_profile(result_client_id)
+                                if profile_data and profile_data.get("client_id"):
+                                    st.session_state.current_client_id = result_client_id
+                                    st.session_state.current_profile = profile_data
+                                    st.session_state.profile_search_mode = "Client ID"  # Switch to ID mode to show profile
+                                    st.rerun()
+                else:
+                    st.warning("No matching clients found. Try adjusting the criteria.")
+                    
+            except Exception as e:
+                st.error(f"Search failed: {str(e)}")
     
     return {
         "client_id": client_id,
@@ -127,7 +212,7 @@ def render_pdf_upload():
     )
     
     if uploaded_file is not None:
-        col_info, col_search = st.columns([3, 1])
+        col_info, col_actions = st.columns([3, 1])
         
         with col_info:
             st.markdown(f"""
@@ -137,9 +222,14 @@ def render_pdf_upload():
             </div>
             """, unsafe_allow_html=True)
         
-        with col_search:
+        with col_actions:
             st.markdown('<div style="margin-top: 6px;"></div>', unsafe_allow_html=True)
-            if st.button("🔍 Search", key="pdf_search_btn", use_container_width=True, type="primary"):
+            
+        # Action buttons in a row
+        col_search, col_analyze = st.columns(2)
+        
+        with col_search:
+            if st.button("🔍 Search", key="pdf_search_btn", use_container_width=True):
                 try:
                     from api_client import get_api_client
                     api = get_api_client()
@@ -170,12 +260,23 @@ def render_pdf_upload():
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
         
-        # Add "Analyze PDF" button
-        st.markdown('<div style="margin-top: 10px;"></div>', unsafe_allow_html=True)
-        if st.button("📊 Analyze This PDF", key="analyze_pdf_content", use_container_width=True):
-            st.session_state.analyze_pdf_file = uploaded_file
-            st.session_state.analyze_pdf_trigger = True
-            st.rerun()
+        with col_analyze:
+            if st.button("📊 Analyze", key="pdf_analyze_btn", use_container_width=True, type="primary"):
+                try:
+                    with st.spinner("Preparing PDF for analysis..."):
+                        # Reset file pointer
+                        uploaded_file.seek(0)
+                        
+                        # Store PDF for analysis using the correct session state keys
+                        st.session_state.analyze_pdf_trigger = True
+                        st.session_state.analyze_pdf_file = uploaded_file
+                        
+                        st.success(f"✓ PDF ready for analysis")
+                        st.rerun()
+                        
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
+        
         
         # Display results if available
         if st.session_state.get("pdf_search_results"):
@@ -209,7 +310,10 @@ def render_pdf_upload():
                     if st.button("📊", key=f"analyze_pdf_client_{client_id}_{idx}", help="Run full analysis"):
                         st.session_state.analyze_client_id = client_id
                         st.session_state.analyze_trigger = True
+                        st.session_state.current_client_id = client_id
+                        st.session_state.current_profile = result
                         st.rerun()
+
 
 
 def render_image_upload():

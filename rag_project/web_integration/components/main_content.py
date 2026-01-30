@@ -867,7 +867,7 @@ def render_main_content(num_similar_cases, client_profile):
             
             # Try to extract client ID from decision context
             import re
-            client_id_match = re.search(r'\b(?:client|Client ID|ID)\s*[:#]?\s*(\d+)', decision_context)
+            client_id_match = re.search(r'\b(?:[Cc]lient|Client\s+ID|ID)\s*[:#]?\s*(\d+)', decision_context)
             extracted_client_id = None
             if client_id_match:
                 extracted_client_id = int(client_id_match.group(1))
@@ -906,17 +906,52 @@ def render_main_content(num_similar_cases, client_profile):
             elif not extracted_client_id:
                 st.info("📝 Analyzing hypothetical scenario (no client ID detected). For real client analysis, mention 'Client XXXXXX'.")
             
+            # Detect if user mentioned a specific credit/loan amount in their query
+            import re
+            credit_match = re.search(r'\$\s*([\d,]+)k?\s*(loan|credit)', decision_context, re.IGNORECASE) or \
+                          re.search(r'(loan|credit)\s*(of|for)?\s*\$\s*([\d,]+)k?', decision_context, re.IGNORECASE)
+            
+            new_credit_amount = None
+            if credit_match:
+                # Extract the amount
+                amount_str = credit_match.group(1) if credit_match.group(1) else credit_match.group(3)
+                amount_str = amount_str.replace(',', '')
+                # Check if it's in "k" format (e.g., "50k")
+                if 'k' in decision_context[credit_match.start():credit_match.end()].lower():
+                    new_credit_amount = float(amount_str) * 1000
+                else:
+                    new_credit_amount = float(amount_str)
+            
+            # Create detailed decision context with emphasis on NEW credit amount if specified
+            context_description = decision_context
+            if profile_text:
+                if new_credit_amount:
+                    # Emphasize the NEW loan amount at the top
+                    context_description = f"""{'='*60}
+⚠️ NEW LOAN APPLICATION: ${new_credit_amount:,.0f}
+{'='*60}
+
+{decision_context}
+
+{'='*60}
+CLIENT HISTORICAL PROFILE (for reference only - amounts below are PAST data):
+{'='*60}
+{profile_text}"""
+                else:
+                    context_description = f"{decision_context}\n\n{'='*60}\nCLIENT FULL PROFILE:\n{'='*60}\n{profile_text}"
+            
             # Create detailed decision context with FULL profile
             decision_ctx = {
                 "client_id": current_client_id or client_profile.get("client_id"),
                 "decision_type": "credit_application",
-                "description": f"{decision_context}\n\n{'='*60}\nCLIENT FULL PROFILE:\n{'='*60}\n{profile_text}" if profile_text else decision_context,
+                "description": context_description,
                 "additional_info": {
                     "age": client_profile.get("age"),
                     "income": client_profile.get("income"),
                     "education": client_profile.get("education"),
                     "employment": client_profile.get("employment"),
-                    "profile_loaded": bool(profile_text)
+                    "profile_loaded": bool(profile_text),
+                    "new_loan_amount": new_credit_amount
                 }
             }
             
@@ -927,8 +962,11 @@ def render_main_content(num_similar_cases, client_profile):
                 key_details = []
                 if metadata.get("AMT_INCOME_TOTAL"):
                     key_details.append(f"Income: ${metadata['AMT_INCOME_TOTAL']:,.0f}")
-                if metadata.get("AMT_CREDIT"):
+                
+                # Only include credit amount from profile if NOT mentioned in decision context
+                if not new_credit_amount and metadata.get("AMT_CREDIT"):
                     key_details.append(f"Credit: ${metadata['AMT_CREDIT']:,.0f}")
+                
                 if metadata.get("NAME_EDUCATION_TYPE"):
                     key_details.append(f"Education: {metadata['NAME_EDUCATION_TYPE']}")
                 if metadata.get("NAME_INCOME_TYPE"):
@@ -936,8 +974,8 @@ def render_main_content(num_similar_cases, client_profile):
                 if metadata.get("CNT_CHILDREN") is not None:
                     key_details.append(f"Children: {metadata['CNT_CHILDREN']}")
                 
-                # Add payment history info if available
-                if "AMT_CREDIT_SUM_DEBT" in metadata:
+                # Add payment history info if available (only if credit not mentioned)
+                if not new_credit_amount and "AMT_CREDIT_SUM_DEBT" in metadata:
                     key_details.append(f"Current Debt: ${metadata['AMT_CREDIT_SUM_DEBT']:,.0f}")
                 
                 enhanced_query = f"{decision_context}\n\nKey Client Details:\n" + ", ".join(key_details)

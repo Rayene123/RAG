@@ -36,19 +36,35 @@ def render_risk_metrics():
     
     # Extract from last analysis if available
     last_analysis = st.session_state.get("last_analysis")
+    overall_risk = None
+    default_prob = None
+    confidence = None
+    
     if last_analysis and last_analysis.get("risk_analysis"):
         risk_data = last_analysis["risk_analysis"]
-        # Extract risk metrics if available
-        overall_risk = risk_data.get("overall_risk_score", None)
-        default_prob = risk_data.get("default_probability", None)
-        confidence = last_analysis.get("avg_similarity", None)
+        structured_output = risk_data.get("structured_output", {})
+        
+        # Extract alternatives risk analysis
+        alternatives = structured_output.get("alternatives_risk_analysis", [])
+        
+        if alternatives:
+            # Get the highest risk score across all alternatives
+            risk_scores = [alt.get("risk_score") for alt in alternatives if alt.get("risk_score") is not None]
+            if risk_scores:
+                # Convert risk score (0-10) to percentage
+                overall_risk = max(risk_scores) * 10
+            
+            # Get the highest default probability across all alternatives
+            default_probs = [alt.get("default_probability") for alt in alternatives if alt.get("default_probability") is not None]
+            if default_probs:
+                # Convert to percentage (if it's already a decimal like 0.4)
+                max_default = max(default_probs)
+                default_prob = max_default * 100 if max_default <= 1.0 else max_default
+        
+        # Get confidence from similarity
+        confidence = last_analysis.get("avg_similarity")
         if confidence:
             confidence = confidence * 100
-    else:
-        # No data available - show message instead
-        overall_risk = None
-        default_prob = None
-        confidence = None
     
     # Only show metrics if we have analysis data
     if overall_risk is None and default_prob is None and confidence is None:
@@ -59,26 +75,32 @@ def render_risk_metrics():
         """, unsafe_allow_html=True)
         return
     
-    st.markdown(f"""
-    <div class="info-card">
-        <div class="info-label">Overall Risk Score</div>
-        <div class="info-value" style="color: #ea580c;">{overall_risk}%</div>
-    </div>
-    """, unsafe_allow_html=True)
+    # Display risk score
+    if overall_risk is not None:
+        st.markdown(f"""
+        <div class="info-card">
+            <div class="info-label">Overall Risk Score</div>
+            <div class="info-value" style="color: #ea580c;">{overall_risk:.0f}%</div>
+        </div>
+        """, unsafe_allow_html=True)
     
-    st.markdown(f"""
-    <div class="info-card">
-        <div class="info-label">Default Probability</div>
-        <div class="info-value" style="color: #16a34a;">{default_prob}%</div>
-    </div>
-    """, unsafe_allow_html=True)
+    # Display default probability
+    if default_prob is not None:
+        st.markdown(f"""
+        <div class="info-card">
+            <div class="info-label">Default Probability</div>
+            <div class="info-value" style="color: #16a34a;">{default_prob:.0f}%</div>
+        </div>
+        """, unsafe_allow_html=True)
     
-    st.markdown(f"""
-    <div class="info-card">
-        <div class="info-label">Confidence Level</div>
-        <div class="info-value" style="color: #1e40af;">{confidence:.0f}%</div>
-    </div>
-    """, unsafe_allow_html=True)
+    # Display confidence
+    if confidence is not None:
+        st.markdown(f"""
+        <div class="info-card">
+            <div class="info-label">Confidence Level</div>
+            <div class="info-value" style="color: #1e40af;">{confidence:.0f}%</div>
+        </div>
+        """, unsafe_allow_html=True)
 
 
 def render_data_quality():
@@ -210,7 +232,6 @@ def render_info_panel():
     """Render complete right info panel"""
     render_risk_metrics()
     render_data_quality()
-    render_metadata_filters()
     render_analysis_summary()
     render_best_practices()
     render_documentation()

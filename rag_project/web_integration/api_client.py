@@ -109,6 +109,19 @@ class APIClient:
         return self._handle_response(response)
     
     
+    def search_metadata(self, filters: Dict, top_k: int = 5) -> Dict[str, Any]:
+        """Search using metadata filters only"""
+        response = requests.post(
+            f"{self.base_url}/search/metadata",
+            json={
+                "filters": filters,
+                "top_k": top_k
+            },
+            headers=self.headers,
+            timeout=30
+        )
+        return self._handle_response(response)
+    
     def search_hybrid(self, query: str, filters: Dict, top_k: int = 5) -> Dict[str, Any]:
         """Hybrid search with text and filters"""
         response = requests.post(
