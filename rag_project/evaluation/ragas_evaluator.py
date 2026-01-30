@@ -16,13 +16,36 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, project_root)
 
 from ragas import evaluate
-from ragas.metrics import (
-    faithfulness,
-    answer_relevancy,
-    context_precision,
-    context_recall,
-    context_relevancy
-)
+# Import metrics with fallback for different RAGAS versions
+try:
+    from ragas.metrics import (
+        faithfulness,
+        answer_relevancy,
+        context_precision,
+        context_recall,
+        context_relevancy
+    )
+except ImportError:
+    try:
+        from ragas.metrics import (
+            faithfulness,
+            answer_relevancy,
+            context_precision,
+            context_recall
+        )
+        from ragas.metrics import context_relevance as context_relevancy
+    except ImportError:
+        from ragas.metrics import (
+            faithfulness,
+            answer_relevancy,
+            context_precision,
+            context_recall
+        )
+        context_relevancy = None
+
+from langchain_mistralai import ChatMistralAI
+from langchain_community.embeddings import HuggingFaceEmbeddings
+import os
 
 from evaluation.metrics_config import get_ragas_metrics, get_metric_descriptions
 
@@ -32,18 +55,34 @@ class RAGASEvaluator:
     Evaluates RAG system performance using RAGAS metrics.
     """
     
-    def __init__(self, llm_provider: str = "openai", embeddings_model: str = "openai"):
+    def __init__(self, llm_provider: str = "mistral", embeddings_model: str = "huggingface"):
         """
         Initialize RAGAS Evaluator.
         
         Args:
-            llm_provider: LLM provider for evaluation ("openai", "azure", etc.)
-            embeddings_model: Embeddings model for evaluation
+            llm_provider: LLM provider for evaluation ("openai", "mistral", etc.)
+            embeddings_model: Embeddings model for evaluation ("openai", "huggingface")
         """
         self.llm_provider = llm_provider
         self.embeddings_model = embeddings_model
+        self.llm = None
+        self.embeddings = None
         
-        print(f"✅ RAGASEvaluator initialized with {llm_provider}")
+        # Initialize LLM based on provider
+        if llm_provider == "mistral":
+            api_key = os.getenv("MISTRAL_API_KEY")
+            if not api_key:
+                raise ValueError("MISTRAL_API_KEY not found in environment variables. Please set it in your .env file.")
+            self.llm = ChatMistralAI(model="mistral-large-latest", api_key=api_key)
+            print(f"✅ RAGASEvaluator initialized with Mistral (mistral-large-latest)")
+        else:
+            print(f"✅ RAGASEvaluator initialized with {llm_provider}")
+        
+        # Initialize embeddings
+        if embeddings_model == "huggingface":
+            print("   Loading HuggingFace embeddings (sentence-transformers/all-mpnet-base-v2)...")
+            self.embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
+            print("   ✅ Embeddings loaded")
     
     def evaluate_dataset(
         self,
@@ -77,26 +116,44 @@ class RAGASEvaluator:
         
         # Run RAGAS evaluation
         try:
-            result = evaluate(
-                dataset=dataset,
-                metrics=metrics,
-            )
+            # Prepare evaluation parameters
+            eval_params = {
+                "dataset": dataset,
+                "metrics": metrics,
+            }
+            
+            # Add LLM and embeddings if using Mistral or HuggingFace
+            if self.llm is not None:
+                eval_params["llm"] = self.llm
+            if self.embeddings is not None:
+                eval_params["embeddings"] = self.embeddings
+            
+            result = evaluate(**eval_params)
             
             if verbose:
                 self._print_results(result)
             
-            return result
+            # Convert result to dictionary for return
+            if hasattr(result, 'to_pandas'):
+                df = result.to_pandas()
+                # Select only numeric columns (metric scores) before calculating mean
+                numeric_cols = df.select_dtypes(include=['number']).columns
+                return df[numeric_cols].mean().to_dict()
+            elif hasattr(result, '__dict__'):
+                return {k: v for k, v in result.__dict__.items() if not k.startswith('_')}
+            else:
+                return result
         
         except Exception as e:
             print(f"❌ Evaluation failed: {str(e)}")
             raise
     
-    def _print_results(self, result: Dict[str, float]):
+    def _print_results(self, result):
         """
         Print evaluation results in a formatted way.
         
         Args:
-            result: Dictionary of metric scores
+            result: RAGAS EvaluationResult object or dictionary of metric scores
         """
         print(f"\n{'='*80}")
         print("RAGAS Evaluation Results")
@@ -104,7 +161,23 @@ class RAGASEvaluator:
         
         descriptions = get_metric_descriptions()
         
-        for metric_name, score in result.items():
+        # Handle both EvaluationResult object and dictionary
+        if hasattr(result, 'to_pandas'):
+            # New RAGAS version - EvaluationResult object
+            df = result.to_pandas()
+            # Only compute mean for numeric columns (metric scores)
+            # Exclude non-numeric columns like 'question', 'contexts', 'answer', 'ground_truth'
+            non_metric_cols = ['question', 'contexts', 'answer', 'ground_truth', 'user_input', 'retrieved_contexts', 'response']
+            metric_cols = [col for col in df.columns if col not in non_metric_cols]
+            result_dict = df[metric_cols].mean().to_dict()
+        elif hasattr(result, '__dict__'):
+            # Try to get attributes as dict
+            result_dict = {k: v for k, v in result.__dict__.items() if not k.startswith('_')}
+        else:
+            # Old version - already a dictionary
+            result_dict = result
+        
+        for metric_name, score in result_dict.items():
             if metric_name in descriptions:
                 print(f"📊 {metric_name.upper()}")
                 print(f"   Score: {score:.4f}")
@@ -131,6 +204,13 @@ class RAGASEvaluator:
             Dictionary of metric scores
         """
         result = self.evaluate_dataset(dataset, metrics, verbose)
+        
+        # Ensure result is a dictionary
+        if not isinstance(result, dict):
+            if hasattr(result, 'to_pandas'):
+                result = result.to_pandas().mean().to_dict()
+            elif hasattr(result, '__dict__'):
+                result = {k: v for k, v in result.__dict__.items() if not k.startswith('_')}
         
         # Save results
         output_path = Path(output_path)
@@ -170,7 +250,13 @@ class RAGASEvaluator:
         comparison_data = []
         for label, result in zip(labels, results_list):
             row = {'Run': label}
-            row.update(result)
+            # Handle both dict and EvaluationResult
+            if isinstance(result, dict):
+                row.update(result)
+            elif hasattr(result, 'to_pandas'):
+                row.update(result.to_pandas().mean().to_dict())
+            else:
+                row.update({k: v for k, v in result.__dict__.items() if not k.startswith('_')})
             comparison_data.append(row)
         
         df = pd.DataFrame(comparison_data)
@@ -203,8 +289,10 @@ class RAGASEvaluator:
             'answer_relevancy': answer_relevancy,
             'context_precision': context_precision,
             'context_recall': context_recall,
-            'context_relevancy': context_relevancy
         }
+        
+        if context_relevancy is not None:
+            metric_map['context_relevancy'] = context_relevancy
         
         if metric_name not in metric_map:
             raise ValueError(f"Unknown metric: {metric_name}")
@@ -212,8 +300,16 @@ class RAGASEvaluator:
         metric = metric_map[metric_name]
         result = evaluate(dataset=dataset, metrics=[metric])
         
+        # Convert result to dictionary
+        if hasattr(result, 'to_pandas'):
+            result_dict = result.to_pandas().mean().to_dict()
+        elif hasattr(result, '__dict__'):
+            result_dict = {k: v for k, v in result.__dict__.items() if not k.startswith('_')}
+        else:
+            result_dict = result
+        
         # Get individual scores from the dataset
-        scores = result.get(metric_name, [])
+        scores = result_dict.get(metric_name, [])
         
         if isinstance(scores, (int, float)):
             # Single aggregated score

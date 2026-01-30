@@ -4,13 +4,34 @@ RAGAS Metrics Configuration.
 Defines which metrics to use and their configuration.
 """
 
-from ragas.metrics import (
-    faithfulness,
-    answer_relevancy,
-    context_precision,
-    context_recall,
-    context_relevancy
-)
+# Import metrics with fallback for different RAGAS versions
+try:
+    from ragas.metrics import (
+        faithfulness,
+        answer_relevancy,
+        context_precision,
+        context_recall,
+        context_relevancy
+    )
+except ImportError:
+    # Try alternative import (older RAGAS versions)
+    try:
+        from ragas.metrics import (
+            faithfulness,
+            answer_relevancy,
+            context_precision,
+            context_recall
+        )
+        from ragas.metrics import context_relevance as context_relevancy
+    except ImportError:
+        # If context_relevance doesn't exist either, create a None placeholder
+        from ragas.metrics import (
+            faithfulness,
+            answer_relevancy,
+            context_precision,
+            context_recall
+        )
+        context_relevancy = None
 
 
 def get_ragas_metrics(include_all=True):
@@ -24,20 +45,24 @@ def get_ragas_metrics(include_all=True):
         List of RAGAS metric instances
     """
     if include_all:
-        return [
+        metrics = [
             faithfulness,
             answer_relevancy,
             context_precision,
             context_recall,
-            context_relevancy
         ]
+        if context_relevancy is not None:
+            metrics.append(context_relevancy)
+        return metrics
     else:
         # Core metrics that work without ground truth
-        return [
+        metrics = [
             faithfulness,
             answer_relevancy,
-            context_relevancy
         ]
+        if context_relevancy is not None:
+            metrics.append(context_relevancy)
+        return metrics
 
 
 def get_metric_descriptions():
